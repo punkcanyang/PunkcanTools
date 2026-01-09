@@ -32,6 +32,8 @@ NC='\033[0m' # No Color
 XRAY_CONFIG_DIR="/usr/local/etc/xray"
 XRAY_CONFIG_FILE="${XRAY_CONFIG_DIR}/config.json"
 CLIENT_CONFIG_FILE="${XRAY_CONFIG_DIR}/client-config.txt"
+VLESS_LINK_FILE="${XRAY_CONFIG_DIR}/vless-link.txt"
+QR_CODE_FILE="${XRAY_CONFIG_DIR}/vless-qrcode.png"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 默认配置
@@ -133,7 +135,7 @@ check_network() {
 install_dependencies() {
     log_info "安装必要依赖包..."
     
-    local packages=("curl" "wget" "unzip" "jq" "openssl" "cron")
+    local packages=("curl" "wget" "unzip" "jq" "openssl" "cron" "qrencode")
     local total=${#packages[@]}
     local current=0
     local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
@@ -418,6 +420,27 @@ setup_health_check() {
 }
 
 #-------------------------------------------------------------------------------
+# 安装管理脚本
+#-------------------------------------------------------------------------------
+install_scripts() {
+    log_info "安装管理脚本..."
+    
+    # 复制显示配置脚本
+    if [[ -f "${SCRIPT_DIR}/show-config.sh" ]]; then
+        cp "${SCRIPT_DIR}/show-config.sh" /usr/local/bin/xray-show-config
+        chmod +x /usr/local/bin/xray-show-config
+        log_success "配置查看脚本已安装: xray-show-config"
+    fi
+    
+    # 复制卸载脚本
+    if [[ -f "${SCRIPT_DIR}/uninstall.sh" ]]; then
+        cp "${SCRIPT_DIR}/uninstall.sh" /usr/local/bin/xray-uninstall.sh
+        chmod +x /usr/local/bin/xray-uninstall.sh
+        log_success "卸载脚本已安装: xray-uninstall.sh"
+    fi
+}
+
+#-------------------------------------------------------------------------------
 # 生成客户端配置
 #-------------------------------------------------------------------------------
 generate_client_config() {
@@ -434,7 +457,17 @@ generate_client_config() {
     # 生成 VLESS 分享链接
     VLESS_LINK="vless://${UUID}@${SERVER_IP}:${PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${DEST}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp&headerType=none#VLESS-Reality"
     
-    # 保存客户端配置
+    # 保存纯链接文件 (方便复制)
+    echo -n "$VLESS_LINK" > "$VLESS_LINK_FILE"
+    log_success "VLESS 分享链接已保存到 ${VLESS_LINK_FILE}"
+    
+    # 生成二维码图片
+    if command -v qrencode &> /dev/null; then
+        qrencode -o "$QR_CODE_FILE" -s 10 -m 2 "$VLESS_LINK"
+        log_success "二维码图片已保存到 ${QR_CODE_FILE}"
+    fi
+    
+    # 保存完整客户端配置
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
                          VLESS + Reality 客户端配置
@@ -488,15 +521,17 @@ ${VLESS_LINK}
 ═══════════════════════════════════════════════════════════════════════════════
 
 1. 请将上述配置导入到您的代理客户端 (V2rayN, Clash, Shadowrocket 等)
-2. 配置文件保存位置: ${CLIENT_CONFIG_FILE}
-3. 查看服务状态: systemctl status xray
-4. 查看日志: journalctl -u xray -f
-5. 卸载命令: bash ${SCRIPT_DIR}/uninstall.sh
+2. 扫描二维码或复制链接: xray-show-config --qr
+3. 查看纯链接: cat ${VLESS_LINK_FILE}
+4. 配置文件保存位置: ${CLIENT_CONFIG_FILE}
+5. 查看服务状态: systemctl status xray
+6. 查看日志: journalctl -u xray -f
+7. 卸载命令: bash /usr/local/bin/xray-uninstall.sh
 
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
 
-    log_success "客户端配置已保存到 ${CLIENT_CONFIG_FILE}"
+    log_success "完整配置已保存到 ${CLIENT_CONFIG_FILE}"
 }
 
 print_client_config() {
@@ -539,6 +574,7 @@ main() {
     configure_firewall
     enable_bbr
     setup_health_check
+    install_scripts
     
     echo ""
     

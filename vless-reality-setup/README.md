@@ -8,8 +8,9 @@
 - 🔐 自动生成密钥和用户配置
 - 🛡️ 自动配置防火墙
 - ⚡ 启用 BBR 网络加速
-- 📋 自动生成客户端配置和分享链接
-- 🔄 定时健康检查和自动重启
+- 📋 自动生成客户端配置、分享链接和二维码
+- � 轻松查看配置: `xray-show-config` 命令
+- �🔄 定时健康检查和自动重启
 
 ## 📋 系统要求
 
@@ -41,11 +42,13 @@ sudo bash uninstall.sh
 
 ## 📄 配置说明
 
-安装完成后，客户端配置会自动保存到:
+安装完成后，会自动生成以下配置文件:
 
-```
-/usr/local/etc/xray/client-config.txt
-```
+| 文件 | 说明 |
+|------|------|
+| `/usr/local/etc/xray/vless-link.txt` | 🔗 纯 VLESS 分享链接（方便复制） |
+| `/usr/local/etc/xray/vless-qrcode.png` | 📱 二维码图片（方便手机扫描） |
+| `/usr/local/etc/xray/client-config.txt` | 📄 完整配置信息 |
 
 配置包含:
 - 服务器连接信息
@@ -59,12 +62,29 @@ vless-reality-setup/
 ├── install.sh          # 主安装脚本
 ├── uninstall.sh        # 卸载脚本
 ├── health-check.sh     # 健康检查脚本
+├── show-config.sh      # 配置查看脚本
 └── README.md           # 说明文档
 ```
+
+安装后的快捷命令:
+- `xray-show-config` - 查看配置和二维码
+- `xray-uninstall.sh` - 卸载脚本
 
 ## 🔧 常用命令
 
 ```bash
+# 查看配置和二维码
+xray-show-config
+
+# 仅查看 VLESS 分享链接
+xray-show-config --link
+
+# 仅显示终端二维码
+xray-show-config --qr
+
+# 查看配置文件路径
+xray-show-config --path
+
 # 查看服务状态
 systemctl status xray
 
@@ -74,8 +94,8 @@ journalctl -u xray -f
 # 手动重启服务
 systemctl restart xray
 
-# 重新查看客户端配置
-cat /usr/local/etc/xray/client-config.txt
+# 复制链接到本地 (scp)
+scp root@服务器IP:/usr/local/etc/xray/vless-link.txt ./
 ```
 
 ## ⚙️ 默认配置
