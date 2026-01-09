@@ -145,6 +145,34 @@ check_network() {
 }
 
 #-------------------------------------------------------------------------------
+# 检查端口是否可用
+#-------------------------------------------------------------------------------
+check_port() {
+    log_info "检查端口 ${PORT} 是否可用..."
+    
+    # 检查端口是否被占用
+    if ss -tlnp 2>/dev/null | grep -q ":${PORT} " || netstat -tlnp 2>/dev/null | grep -q ":${PORT} "; then
+        log_warn "端口 ${PORT} 已被占用!"
+        
+        # 显示占用进程
+        local process=$(ss -tlnp 2>/dev/null | grep ":${PORT} " | head -1 || netstat -tlnp 2>/dev/null | grep ":${PORT} " | head -1)
+        log_info "占用进程: $process"
+        
+        # 自动切换到备用端口
+        PORT=8443
+        log_info "自动切换到备用端口: ${PORT}"
+        
+        # 检查备用端口
+        if ss -tlnp 2>/dev/null | grep -q ":${PORT} " || netstat -tlnp 2>/dev/null | grep -q ":${PORT} "; then
+            log_error "备用端口 ${PORT} 也被占用，请手动指定可用端口"
+            exit 1
+        fi
+    fi
+    
+    log_success "将使用端口: ${PORT}"
+}
+
+#-------------------------------------------------------------------------------
 # 安装 EPEL 仓库
 #-------------------------------------------------------------------------------
 install_epel() {
@@ -584,6 +612,7 @@ main() {
     check_root
     check_system
     check_network
+    check_port
     
     echo ""
     
