@@ -58,10 +58,23 @@ log_success() {
     echo -e "${GREEN}[✓]${NC} $1"
 }
 
+# 进度指示器
+show_progress() {
+    local pid=$1
+    local msg=$2
+    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    local i=0
+    while kill -0 $pid 2>/dev/null; do
+        printf "\r${YELLOW}[%s]${NC} %s " "${spin:i++%10:1}" "$msg"
+        sleep 0.1
+    done
+    printf "\r"
+}
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
-    echo "║         VLESS + Reality 一键安装脚本 for Debian 12            ║"
+    echo "║       VLESS + Reality 一键安装脚本 for Debian/Ubuntu          ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -86,38 +99,71 @@ check_system() {
     
     source /etc/os-release
     
-    if [[ "$ID" != "debian" ]]; then
-        log_warn "此脚本针对 Debian 系统优化，当前系统: $ID"
+    # 支持 Debian 和 Ubuntu
+    if [[ "$ID" != "debian" && "$ID" != "ubuntu" ]]; then
+        log_warn "此脚本针对 Debian/Ubuntu 系统优化，当前系统: $ID"
         read -p "是否继续安装？(y/N): " confirm
         if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
             exit 1
         fi
     fi
     
-    if [[ "$VERSION_ID" != "12" ]]; then
-        log_warn "此脚本针对 Debian 12 优化，当前版本: $VERSION_ID"
-    fi
-    
     log_success "系统检查通过: $PRETTY_NAME"
 }
 
 check_network() {
-    if ! ping -c 1 google.com &> /dev/null && ! ping -c 1 github.com &> /dev/null; then
-        log_error "网络连接失败，请检查网络设置"
+    # 注意：此时可能还没有 curl，使用 apt-get update 测试网络
+    echo -ne "${YELLOW}[...]${NC} 测试网络连接并更新软件源..."
+    if apt-get update > /dev/null 2>&1; then
+        echo -e "\r${GREEN}[✓]${NC} 网络连接正常，软件源已更新    "
+        return 0
+    fi
+    
+    echo -e "\r${YELLOW}[!]${NC} 网络检测失败 (可能是 DNS 或防火墙问题)"
+    read -p "是否继续安装？(y/N): " confirm
+    if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+        log_error "安装已取消"
         exit 1
     fi
-    log_success "网络连接正常"
 }
 
 #-------------------------------------------------------------------------------
 # 安装依赖
 #-------------------------------------------------------------------------------
 install_dependencies() {
-    log_info "更新软件包列表..."
-    apt-get update -qq
+    log_info "安装必要依赖包..."
     
-    log_info "安装必要依赖..."
-    apt-get install -y -qq curl wget unzip jq openssl cron > /dev/null 2>&1
+    local packages=("curl" "wget" "unzip" "jq" "openssl" "cron")
+    local total=${#packages[@]}
+    local current=0
+    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    
+    for pkg in "${packages[@]}"; do
+        current=$((current + 1))
+        
+        if dpkg -s "$pkg" > /dev/null 2>&1; then
+            echo -e "${GREEN}[${current}/${total}]${NC} ${pkg} ${CYAN}(已安装)${NC}"
+        else
+            # 后台安装并显示动态进度
+            apt-get install -y "$pkg" > /dev/null 2>&1 &
+            local pid=$!
+            local i=0
+            
+            while kill -0 $pid 2>/dev/null; do
+                printf "\r${YELLOW}[${current}/${total}]${NC} 安装 ${pkg}... ${spin:i++%10:1} "
+                sleep 0.1
+            done
+            
+            wait $pid
+            local result=$?
+            
+            if [[ $result -eq 0 ]]; then
+                printf "\r${GREEN}[${current}/${total}]${NC} ${pkg} ${GREEN}✓${NC}              \n"
+            else
+                printf "\r${RED}[${current}/${total}]${NC} ${pkg} ${RED}失败${NC}          \n"
+            fi
+        fi
+    done
     
     log_success "依赖安装完成"
 }
@@ -126,11 +172,13 @@ install_dependencies() {
 # 安装 Xray-core
 #-------------------------------------------------------------------------------
 install_xray() {
-    log_info "安装 Xray-core..."
+    log_info "正在下载并安装 Xray-core (这可能需要几分钟)..."
+    echo ""
     
-    # 使用官方安装脚本
+    # 使用官方安装脚本 (显示输出)
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
     
+    echo ""
     if [[ ! -f /usr/local/bin/xray ]]; then
         log_error "Xray 安装失败"
         exit 1
@@ -149,8 +197,26 @@ generate_keys() {
     
     # 生成 x25519 密钥对
     KEYS=$(/usr/local/bin/xray x25519)
-    PRIVATE_KEY=$(echo "$KEYS" | grep "Private key:" | awk '{print $3}')
-    PUBLIC_KEY=$(echo "$KEYS" | grep "Public key:" | awk '{print $3}')
+    
+    # 兼容新版 (25.x) 和旧版格式
+    # 新版: PrivateKey: xxx / Password: xxx (Password 是 Public Key)
+    # 旧版: Private key: xxx / Public key: xxx
+    if echo "$KEYS" | grep -q "PrivateKey:"; then
+        # 新版格式 (Xray 25.x+)
+        PRIVATE_KEY=$(echo "$KEYS" | grep "PrivateKey:" | awk '{print $2}')
+        PUBLIC_KEY=$(echo "$KEYS" | grep "Password:" | awk '{print $2}')
+    else
+        # 旧版格式
+        PRIVATE_KEY=$(echo "$KEYS" | grep "Private key:" | awk '{print $3}')
+        PUBLIC_KEY=$(echo "$KEYS" | grep "Public key:" | awk '{print $3}')
+    fi
+    
+    # 验证密钥是否生成成功
+    if [[ -z "$PRIVATE_KEY" || -z "$PUBLIC_KEY" ]]; then
+        log_error "密钥生成失败"
+        log_info "xray x25519 输出: $KEYS"
+        exit 1
+    fi
     
     # 生成 UUID
     UUID=$(cat /proc/sys/kernel/random/uuid)
@@ -159,6 +225,8 @@ generate_keys() {
     SHORT_ID=$(openssl rand -hex 4)
     
     log_success "密钥生成完成"
+    log_info "Private Key: ${PRIVATE_KEY:0:10}..."
+    log_info "Public Key: ${PUBLIC_KEY:0:10}..."
 }
 
 generate_xray_config() {

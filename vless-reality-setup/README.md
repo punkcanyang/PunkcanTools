@@ -1,6 +1,6 @@
 # VLESS + Reality 一键安装脚本
 
-在 Debian 12 环境上一键部署 VLESS + Reality 代理服务器。
+在 Debian/Ubuntu 系统上一键部署 VLESS + Reality 代理服务器。
 
 ## ✨ 功能
 
@@ -13,7 +13,7 @@
 
 ## 📋 系统要求
 
-- Debian 12 (其他 Debian/Ubuntu 系统可能兼容)
+- Debian 11/12/13 或 Ubuntu 20.04/22.04/24.04
 - Root 权限
 - 网络连接
 
@@ -23,8 +23,8 @@
 
 ```bash
 # 下载脚本
-git clone https://github.com/yourusername/vless-reality-setup.git
-cd vless-reality-setup
+git clone https://github.com/punkcanyang/PunkcanTools.git
+cd PunkcanTools/vless-reality-setup
 
 # 给予执行权限
 chmod +x install.sh health-check.sh uninstall.sh
@@ -116,6 +116,37 @@ cat /usr/local/etc/xray/client-config.txt
 1. 确认 BBR 已启用: `sysctl net.ipv4.tcp_congestion_control`
 2. 检查服务器带宽限制
 3. 尝试更换客户端指纹 (fingerprint)
+
+### 手动生成客户端配置
+
+如果安装过程中断或需要重新生成客户端配置，按以下步骤操作：
+
+**1. 查看服务器配置获取 UUID 和 Short ID：**
+```bash
+cat /usr/local/etc/xray/config.json | jq '.inbounds[0].settings.clients[0].id'
+cat /usr/local/etc/xray/config.json | jq '.inbounds[0].streamSettings.realitySettings.shortIds[0]'
+```
+
+**2. 从 Private Key 获取 Public Key：**
+```bash
+# 先查看 Private Key
+PRIVATE_KEY=$(cat /usr/local/etc/xray/config.json | jq -r '.inbounds[0].streamSettings.realitySettings.privateKey')
+echo "Private Key: $PRIVATE_KEY"
+
+# 获取 Public Key
+/usr/local/bin/xray x25519 -i "$PRIVATE_KEY"
+# 输出中的 Password 就是 Public Key
+```
+
+**3. 生成 VLESS 分享链接：**
+```
+vless://UUID@服务器IP:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=chrome&pbk=PUBLIC_KEY&sid=SHORT_ID&type=tcp&headerType=none#VLESS-Reality
+```
+
+**4. 导入客户端：**
+- **Shadowrocket**: 复制链接 → 打开 App → 点击 "+" → 从剪贴板导入
+- **V2rayN**: 复制链接 → 服务器 → 从剪贴板导入
+- **Clash**: 需要转换为 Clash 格式配置
 
 ## 📜 许可证
 
