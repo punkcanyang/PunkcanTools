@@ -1,6 +1,6 @@
 # VLESS + Reality 一键安装脚本
 
-在 Debian/Ubuntu 系统上一键部署 VLESS + Reality 代理服务器。
+在 Debian/Ubuntu 或 CentOS/RHEL 系统上一键部署 VLESS + Reality 代理服务器。
 
 ## ✨ 功能
 
@@ -14,13 +14,19 @@
 
 ## 📋 系统要求
 
-- Debian 11/12/13 或 Ubuntu 20.04/22.04/24.04
+| 系统 | 支持版本 |
+|------|----------|
+| Debian | 11 / 12 / 13 |
+| Ubuntu | 20.04 / 22.04 / 24.04 |
+| CentOS | 7 / 8 / 9 |
+| RHEL / Rocky / Alma | 7 / 8 / 9 |
+
 - Root 权限
 - 网络连接
 
 ## 🚀 快速开始
 
-### 安装
+### Debian / Ubuntu 安装
 
 ```bash
 # 下载脚本
@@ -28,16 +34,34 @@ git clone https://github.com/punkcanyang/PunkcanTools.git
 cd PunkcanTools/vless-reality-setup
 
 # 给予执行权限
-chmod +x install.sh health-check.sh uninstall.sh
+chmod +x *.sh
 
 # 执行安装
 sudo bash install.sh
 ```
 
+### CentOS / RHEL 安装
+
+```bash
+# 下载脚本
+git clone https://github.com/punkcanyang/PunkcanTools.git
+cd PunkcanTools/vless-reality-setup
+
+# 给予执行权限
+chmod +x *.sh
+
+# 执行安装 (CentOS 版本)
+sudo bash install-centos.sh
+```
+
 ### 卸载
 
 ```bash
+# Debian/Ubuntu
 sudo bash uninstall.sh
+
+# CentOS/RHEL
+sudo bash uninstall-centos.sh
 ```
 
 ## 📄 配置说明
@@ -59,10 +83,12 @@ sudo bash uninstall.sh
 
 ```
 vless-reality-setup/
-├── install.sh          # 主安装脚本
-├── uninstall.sh        # 卸载脚本
-├── health-check.sh     # 健康检查脚本
-├── show-config.sh      # 配置查看脚本
+├── install.sh          # Debian/Ubuntu 安装脚本
+├── install-centos.sh   # CentOS/RHEL 安装脚本
+├── uninstall.sh        # Debian/Ubuntu 卸载脚本
+├── uninstall-centos.sh # CentOS/RHEL 卸载脚本
+├── health-check.sh     # 健康检查脚本 (通用)
+├── show-config.sh      # 配置查看脚本 (通用)
 └── README.md           # 说明文档
 ```
 
