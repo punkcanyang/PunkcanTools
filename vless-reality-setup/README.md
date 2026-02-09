@@ -18,8 +18,8 @@
 |------|----------|
 | Debian | 11 / 12 / 13 |
 | Ubuntu | 20.04 / 22.04 / 24.04 |
-| CentOS | 7 / 8 / 9 |
-| RHEL / Rocky / Alma | 7 / 8 / 9 |
+| CentOS |  8 / 9 |
+| RHEL / Rocky / Alma |  8 / 9 |
 
 - Root 权限
 - 网络连接

@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>星盘计算工具</title>
+  <style>
+    :root {
+      --bg-primary: #0f0f23;
+      --bg-secondary: #1a1a2e;
+      --bg-card: #16213e;
+      --text-primary: #e0e0e0;
+      --text-secondary: #a0a0a0;
+      --accent-gold: #ffd700;
+      --accent-purple: #9d4edd;
+      --accent-blue: #4cc9f0;
+      --border-color: #2a2a4a;
+      --gradient-1: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      --gradient-2: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 20% 80%, rgba(157, 78, 221, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(76, 201, 240, 0.1) 0%, transparent 50%);
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 3rem;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      background: var(--gradient-1);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 350px 1fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 900px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .card h2 {
+      font-size: 1.3rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card h2 span {
+      font-size: 1.5rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 1rem;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent-purple);
+      box-shadow: 0 0 0 3px rgba(157, 78, 221, 0.2);
+    }
+
+    .location-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 1rem;
+      border: none;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-primary {
+      background: var(--gradient-1);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .result-section {
+      display: none;
+    }
+
+    .result-section.visible {
+      display: block;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .tab {
+      padding: 0.75rem 1.5rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .tab.active {
+      background: var(--gradient-1);
+      border-color: transparent;
+      color: white;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* 四角卡片 */
+    .angles-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .angle-card {
+      background: var(--bg-secondary);
+      padding: 1rem;
+      border-radius: 12px;
+      text-align: center;
+      border: 1px solid var(--border-color);
+    }
+
+    .angle-card .label {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.25rem;
+    }
+
+    .angle-card .value {
+      font-size: 1.1rem;
+      color: var(--accent-gold);
+    }
+
+    /* 行星表格 */
+    .planets-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .planets-table th {
+      text-align: left;
+      padding: 0.75rem;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+
+    .planets-table td {
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .planets-table tr:hover td {
+      background: rgba(157, 78, 221, 0.1);
+    }
+
+    .planet-symbol {
+      font-size: 1.5rem;
+      margin-right: 0.5rem;
+    }
+
+    .retrograde {
+      color: #ff6b6b;
+      font-size: 0.85rem;
+      margin-left: 0.5rem;
+    }
+
+    /* 相位表格 */
+    .aspects-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .aspects-table th {
+      text-align: left;
+      padding: 0.75rem;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+
+    .aspects-table td {
+      padding: 0.75rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .aspect-symbol {
+      font-size: 1.3rem;
+      color: var(--accent-blue);
+    }
+
+    /* 宫位列表 */
+    .houses-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+    }
+
+    @media (max-width: 600px) {
+      .houses-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    .house-card {
+      background: var(--bg-secondary);
+      padding: 0.75rem;
+      border-radius: 8px;
+      text-align: center;
+      border: 1px solid var(--border-color);
+    }
+
+    .house-card .number {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .house-card .sign {
+      font-size: 1.2rem;
+      margin: 0.25rem 0;
+    }
+
+    .house-card .degree {
+      font-size: 0.9rem;
+      color: var(--accent-gold);
+    }
+
+    /* 加载动画 */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .loading.visible {
+      display: block;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid var(--border-color);
+      border-top-color: var(--accent-purple);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error {
+      background: rgba(255, 107, 107, 0.1);
+      border: 1px solid #ff6b6b;
+      padding: 1rem;
+      border-radius: 8px;
+      color: #ff6b6b;
+      margin-bottom: 1rem;
+      display: none;
+    }
+
+    .error.visible {
+      display: block;
+    }
+
+    /* 预设地点 */
+    .presets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .preset-btn {
+      padding: 0.25rem 0.75rem;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .preset-btn:hover {
+      background: var(--accent-purple);
+      border-color: var(--accent-purple);
+      color: white;
+    }
+
+    /* 圆盘星图 */
+    .chart-container {
+      display: flex;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    #astro-chart {
+      max-width: 550px;
+      height: auto;
+    }
+
+    .chart-zodiac-bg {
+      fill: var(--bg-secondary);
+    }
+
+    .chart-house-bg {
+      fill: var(--bg-primary);
+    }
+
+    .chart-center {
+      fill: var(--bg-card);
+    }
+
+    .chart-line {
+      stroke: var(--border-color);
+      stroke-width: 1;
+    }
+
+    .chart-zodiac-line {
+      stroke: var(--accent-purple);
+      stroke-width: 1.5;
+      opacity: 0.6;
+    }
+
+    .chart-house-line {
+      stroke: var(--accent-gold);
+      stroke-width: 1;
+      opacity: 0.5;
+    }
+
+    .chart-aspect-line {
+      stroke-width: 1;
+      opacity: 0.6;
+    }
+
+    .aspect-conjunction { stroke: #ff6b6b; }
+    .aspect-sextile { stroke: #4cc9f0; }
+    .aspect-square { stroke: #ff9f43; }
+    .aspect-trine { stroke: #26de81; }
+    .aspect-opposition { stroke: #a55eea; }
+
+    .chart-planet-symbol {
+      font-size: 16px;
+      fill: var(--text-primary);
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+
+    .chart-zodiac-symbol {
+      font-size: 18px;
+      fill: var(--accent-gold);
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+
+    .chart-degree-text {
+      font-size: 9px;
+      fill: var(--text-secondary);
+      text-anchor: middle;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>⭐ 星盘计算工具</h1>
+      <p>输入时间和地点，生成详细的占星图表</p>
+    </header>
+
+    <div class="main-grid">
+      <!-- 输入表单 -->
+      <div class="card">
+        <h2><span>📅</span> 出生信息</h2>
+        
+        <div class="form-group">
+          <label for="datetime">日期和时间</label>
+          <input type="datetime-local" id="datetime" step="60">
+        </div>
+
+        <div class="form-group">
+          <label>出生地点</label>
+          <div class="location-row">
+            <div>
+              <input type="number" id="latitude" placeholder="纬度" step="0.0001" min="-90" max="90">
+            </div>
+            <div>
+              <input type="number" id="longitude" placeholder="经度" step="0.0001" min="-180" max="180">
+            </div>
+          </div>
+          <div class="presets">
+            <button class="preset-btn" data-lat="39.9042" data-lon="116.4074">北京</button>
+            <button class="preset-btn" data-lat="31.2304" data-lon="121.4737">上海</button>
+            <button class="preset-btn" data-lat="23.1291" data-lon="113.2644">广州</button>
+            <button class="preset-btn" data-lat="22.5431" data-lon="114.0579">深圳</button>
+            <button class="preset-btn" data-lat="25.0330" data-lon="121.5654">台北</button>
+            <button class="preset-btn" data-lat="22.3193" data-lon="114.1694">香港</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="timezone">时区</label>
+          <select id="timezone">
+            <option value="Asia/Shanghai">中国标准时间 (UTC+8)</option>
+            <option value="Asia/Tokyo">日本标准时间 (UTC+9)</option>
+            <option value="Asia/Seoul">韩国标准时间 (UTC+9)</option>
+            <option value="Asia/Hong_Kong">香港时间 (UTC+8)</option>
+            <option value="Asia/Taipei">台北时间 (UTC+8)</option>
+            <option value="America/New_York">美国东部时间</option>
+            <option value="America/Los_Angeles">美国太平洋时间</option>
+            <option value="Europe/London">伦敦时间</option>
+            <option value="Europe/Paris">巴黎时间</option>
+            <option value="UTC">UTC</option>
+          </select>
+        </div>
+
+        <button class="btn btn-primary" id="calculateBtn">
+          ✨ 计算星盘
+        </button>
+      </div>
+
+      <!-- 结果展示 -->
+      <div>
+        <div class="error" id="error"></div>
+        
+        <div class="loading" id="loading">
+          <div class="spinner"></div>
+          <p>正在计算星盘...</p>
+        </div>
+
+        <div class="result-section" id="result">
+          <div class="card">
+            <div class="tabs">
+              <button class="tab active" data-tab="chart">星图</button>
+              <button class="tab" data-tab="planets">行星</button>
+              <button class="tab" data-tab="houses">宫位</button>
+              <button class="tab" data-tab="aspects">相位</button>
+            </div>
+
+            <!-- 圆盘星图 -->
+            <div class="tab-content active" id="chart-tab">
+              <div class="chart-container">
+                <svg id="astro-chart" viewBox="0 0 600 600" width="100%" height="auto"></svg>
+              </div>
+            </div>
+
+            <!-- 四角信息 -->
+            <div class="angles-grid" id="angles"></div>
+
+            <!-- 行星 -->
+            <div class="tab-content" id="planets-tab">
+              <table class="planets-table">
+                <thead>
+                  <tr>
+                    <th>行星</th>
+                    <th>位置</th>
+                    <th>宫位</th>
+                  </tr>
+                </thead>
+                <tbody id="planets-body"></tbody>
+              </table>
+            </div>
+
+            <!-- 宫位 -->
+            <div class="tab-content" id="houses-tab">
+              <div class="houses-grid" id="houses-grid"></div>
+            </div>
+
+            <!-- 相位 -->
+            <div class="tab-content" id="aspects-tab">
+              <table class="aspects-table">
+                <thead>
+                  <tr>
+                    <th>行星 1</th>
+                    <th>相位</th>
+                    <th>行星 2</th>
+                    <th>容许度</th>
+                  </tr>
+                </thead>
+                <tbody id="aspects-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // DOM 元素
+    const datetimeInput = document.getElementById('datetime');
+    const latitudeInput = document.getElementById('latitude');
+    const longitudeInput = document.getElementById('longitude');
+    const timezoneSelect = document.getElementById('timezone');
+    const calculateBtn = document.getElementById('calculateBtn');
+    const loadingDiv = document.getElementById('loading');
+    const errorDiv = document.getElementById('error');
+    const resultDiv = document.getElementById('result');
+
+    // 设置默认时间为当前时间
+    const now = new Date();
+    const localISOTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString().slice(0, 16);
+    datetimeInput.value = localISOTime;
+
+    // 预设地点按钮
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        latitudeInput.value = btn.dataset.lat;
+        longitudeInput.value = btn.dataset.lon;
+      });
+    });
+
+    // 标签页切换
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+      });
+    });
+
+    // 计算星盘
+    calculateBtn.addEventListener('click', async () => {
+      const datetime = datetimeInput.value;
+      const latitude = parseFloat(latitudeInput.value);
+      const longitude = parseFloat(longitudeInput.value);
+      const timezone = timezoneSelect.value;
+
+      // 验证输入
+      if (!datetime) {
+        showError('请选择日期和时间');
+        return;
+      }
+      if (isNaN(latitude) || latitude < -90 || latitude > 90) {
+        showError('请输入有效的纬度 (-90 到 90)');
+        return;
+      }
+      if (isNaN(longitude) || longitude < -180 || longitude > 180) {
+        showError('请输入有效的经度 (-180 到 180)');
+        return;
+      }
+
+      // 显示加载状态
+      hideError();
+      loadingDiv.classList.add('visible');
+      resultDiv.classList.remove('visible');
+      calculateBtn.disabled = true;
+
+      try {
+        const response = await fetch('/api/chart', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ datetime, latitude, longitude, timezone })
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.error);
+        }
+
+        renderChart(result.data);
+        resultDiv.classList.add('visible');
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        loadingDiv.classList.remove('visible');
+        calculateBtn.disabled = false;
+      }
+    });
+
+    function showError(message) {
+      errorDiv.textContent = message;
+      errorDiv.classList.add('visible');
+    }
+
+    function hideError() {
+      errorDiv.classList.remove('visible');
+    }
+
+    function renderChart(chart) {
+      // 渲染圆盘星图
+      renderAstroChart(chart);
+
+      // 渲染四角
+      const anglesHtml = `
+        <div class="angle-card">
+          <div class="label">上升点 (ASC)</div>
+          <div class="value">${chart.angles.ascendant.sign} ${chart.angles.ascendant.degree}</div>
+        </div>
+        <div class="angle-card">
+          <div class="label">天顶 (MC)</div>
+          <div class="value">${chart.angles.midheaven.sign} ${chart.angles.midheaven.degree}</div>
+        </div>
+        <div class="angle-card">
+          <div class="label">下降点 (DSC)</div>
+          <div class="value">${chart.angles.descendant.sign} ${chart.angles.descendant.degree}</div>
+        </div>
+        <div class="angle-card">
+          <div class="label">天底 (IC)</div>
+          <div class="value">${chart.angles.imumCoeli.sign} ${chart.angles.imumCoeli.degree}</div>
+        </div>
+      `;
+      document.getElementById('angles').innerHTML = anglesHtml;
+
+      // 渲染行星
+      const planetsHtml = chart.planets.map(planet => `
+        <tr>
+          <td>
+            <span class="planet-symbol">${planet.symbol}</span>
+            ${planet.name}
+            ${planet.retrograde ? '<span class="retrograde">℞ 逆行</span>' : ''}
+          </td>
+          <td>${planet.signSymbol} ${planet.fullPosition}</td>
+          <td>第 ${planet.house} 宫</td>
+        </tr>
+      `).join('');
+      document.getElementById('planets-body').innerHTML = planetsHtml;
+
+      // 渲染宫位
+      const housesHtml = chart.houses.map(house => `
+        <div class="house-card">
+          <div class="number">第 ${house.number} 宫</div>
+          <div class="sign">${house.symbol} ${house.sign}</div>
+          <div class="degree">${house.degree}</div>
+        </div>
+      `).join('');
+      document.getElementById('houses-grid').innerHTML = housesHtml;
+
+      // 渲染相位
+      const aspectsHtml = chart.aspects.map(aspect => `
+        <tr>
+          <td>${aspect.planet1.symbol} ${aspect.planet1.name}</td>
+          <td><span class="aspect-symbol">${aspect.aspectSymbol}</span> ${aspect.aspect}</td>
+          <td>${aspect.planet2.symbol} ${aspect.planet2.name}</td>
+          <td>${aspect.orb}°</td>
+        </tr>
+      `).join('');
+      document.getElementById('aspects-body').innerHTML = aspectsHtml || 
+        '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">无主要相位</td></tr>';
+    }
+
+    // 圆盘星图渲染
+    const ZODIAC_SYMBOLS = ['♈', '♉', '♊', '♋', '♌', '♍', '♎', '♏', '♐', '♑', '♒', '♓'];
+    const ZODIAC_COLORS = [
+      '#ff6b6b', '#26de81', '#fd9644', '#4b7bec', '#fed330', '#26de81',
+      '#4cc9f0', '#4b7bec', '#fd9644', '#778ca3', '#4cc9f0', '#a55eea'
+    ];
+
+    function renderAstroChart(chart) {
+      const svg = document.getElementById('astro-chart');
+      const cx = 300, cy = 300;
+      const outerRadius = 280;
+      const zodiacRadius = 250;
+      const houseRadius = 200;
+      const planetRadius = 160;
+      const innerRadius = 100;
+      
+      // ASC 的经度作为旋转偏移（使 ASC 在左边水平线上）
+      const ascLon = chart.angles.ascendant.longitude;
+      
+      // 角度转换：黄道经度 -> SVG 角度
+      // 在占星图中，ASC 在左边（180度），逆时针方向增加
+      function lonToAngle(lon) {
+        return 180 - lon + ascLon;
+      }
+      
+      // 极坐标转笛卡尔坐标
+      function polarToCartesian(cx, cy, radius, angleDeg) {
+        const angleRad = (angleDeg - 90) * Math.PI / 180;
+        return {
+          x: cx + radius * Math.cos(angleRad),
+          y: cy + radius * Math.sin(angleRad)
+        };
+      }
+
+      // 创建 SVG 内容
+      let svgContent = '';
+
+      // 背景圆环
+      svgContent += `<circle cx="${cx}" cy="${cy}" r="${outerRadius}" class="chart-zodiac-bg"/>`;
+      svgContent += `<circle cx="${cx}" cy="${cy}" r="${zodiacRadius}" class="chart-house-bg"/>`;
+      svgContent += `<circle cx="${cx}" cy="${cy}" r="${houseRadius}" class="chart-house-bg"/>`;
+      svgContent += `<circle cx="${cx}" cy="${cy}" r="${innerRadius}" class="chart-center"/>`;
+
+      // 分隔圆环的边界线
+      svgContent += `<circle cx="${cx}" cy="${cy}" r="${outerRadius}" fill="none" class="chart-line"/>`;
+      svgContent += `<circle cx="${cx}" cy="${cy}" r="${zodiacRadius}" fill="none" class="chart-line"/>`;
+      svgContent += `<circle cx="${cx}" cy="${cy}" r="${houseRadius}" fill="none" class="chart-line"/>`;
+      svgContent += `<circle cx="${cx}" cy="${cy}" r="${innerRadius}" fill="none" class="chart-line"/>`;
+
+      // 绘制黄道十二宫分割线和符号
+      for (let i = 0; i < 12; i++) {
+        const signStart = i * 30;
+        const angle = lonToAngle(signStart);
+        
+        // 分割线
+        const p1 = polarToCartesian(cx, cy, zodiacRadius, angle);
+        const p2 = polarToCartesian(cx, cy, outerRadius, angle);
+        svgContent += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" class="chart-zodiac-line"/>`;
+        
+        // 星座符号（放在每个星座的中间）
+        const symbolAngle = lonToAngle(signStart + 15);
+        const symbolPos = polarToCartesian(cx, cy, (zodiacRadius + outerRadius) / 2, symbolAngle);
+        svgContent += `<text x="${symbolPos.x}" y="${symbolPos.y}" class="chart-zodiac-symbol" fill="${ZODIAC_COLORS[i]}">${ZODIAC_SYMBOLS[i]}</text>`;
+      }
+
+      // 绘制宫位线
+      chart.houses.forEach((house, i) => {
+        const angle = lonToAngle(house.longitude);
+        const p1 = polarToCartesian(cx, cy, innerRadius, angle);
+        const p2 = polarToCartesian(cx, cy, houseRadius, angle);
+        
+        // 主轴（1, 4, 7, 10 宫）用粗线
+        const isAxis = [0, 3, 6, 9].includes(i);
+        const strokeWidth = isAxis ? 2 : 1;
+        const opacity = isAxis ? 0.8 : 0.4;
+        
+        svgContent += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" 
+          stroke="#ffd700" stroke-width="${strokeWidth}" opacity="${opacity}"/>`;
+        
+        // 宫位数字
+        const nextHouse = chart.houses[(i + 1) % 12];
+        let midAngle;
+        if (nextHouse.longitude > house.longitude) {
+          midAngle = lonToAngle((house.longitude + nextHouse.longitude) / 2);
+        } else {
+          midAngle = lonToAngle((house.longitude + nextHouse.longitude + 360) / 2);
+        }
+        const numPos = polarToCartesian(cx, cy, (innerRadius + houseRadius) / 2, midAngle);
+        svgContent += `<text x="${numPos.x}" y="${numPos.y}" class="chart-degree-text" fill="#888">${house.number}</text>`;
+      });
+
+      // 绘制相位线（在内圈）
+      const aspectClassMap = {
+        '合相': 'aspect-conjunction',
+        '六合': 'aspect-sextile',
+        '四分': 'aspect-square',
+        '三合': 'aspect-trine',
+        '对冲': 'aspect-opposition'
+      };
+
+      chart.aspects.forEach(aspect => {
+        const planet1 = chart.planets.find(p => p.id === aspect.planet1.id);
+        const planet2 = chart.planets.find(p => p.id === aspect.planet2.id);
+        if (planet1 && planet2) {
+          const angle1 = lonToAngle(planet1.longitude);
+          const angle2 = lonToAngle(planet2.longitude);
+          const p1 = polarToCartesian(cx, cy, innerRadius - 10, angle1);
+          const p2 = polarToCartesian(cx, cy, innerRadius - 10, angle2);
+          const aspectClass = aspectClassMap[aspect.aspect] || '';
+          svgContent += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" 
+            class="chart-aspect-line ${aspectClass}"/>`;
+        }
+      });
+
+      // 绘制行星
+      const planetPositions = [];
+      chart.planets.forEach(planet => {
+        const baseAngle = lonToAngle(planet.longitude);
+        
+        // 简单的行星位置碰撞检测
+        let finalAngle = baseAngle;
+        let offset = 0;
+        for (const pos of planetPositions) {
+          if (Math.abs(finalAngle - pos) < 10) {
+            offset += 12;
+            finalAngle = baseAngle + offset;
+          }
+        }
+        planetPositions.push(finalAngle);
+        
+        const pos = polarToCartesian(cx, cy, planetRadius, finalAngle);
+        
+        // 行星符号
+        svgContent += `<text x="${pos.x}" y="${pos.y}" class="chart-planet-symbol">${planet.symbol}</text>`;
+        
+        // 连接线到实际位置
+        const actualPos = polarToCartesian(cx, cy, houseRadius - 5, baseAngle);
+        if (offset > 0) {
+          svgContent += `<line x1="${pos.x}" y1="${pos.y + 10}" x2="${actualPos.x}" y2="${actualPos.y}" 
+            stroke="#666" stroke-width="0.5" stroke-dasharray="2,2"/>`;
+        }
+        
+        // 逆行标记
+        if (planet.retrograde) {
+          const rPos = polarToCartesian(cx, cy, planetRadius - 18, finalAngle);
+          svgContent += `<text x="${rPos.x}" y="${rPos.y}" class="chart-degree-text" fill="#ff6b6b">℞</text>`;
+        }
+      });
+
+      svg.innerHTML = svgContent;
+    }
+  </script>
+</body>
+</html>

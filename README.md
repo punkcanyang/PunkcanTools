@@ -6,10 +6,20 @@
 
 | 工具 | 描述 |
 |------|------|
+| [astro-chart](./astro-chart/) | 星盘计算工具，输入时间地点，生成行星位置、宫位、相位 |
 | [vless-reality-setup](./vless-reality-setup/) | VLESS + Reality 一键部署脚本，支持 Debian/Ubuntu/CentOS |
 | [word2md](./word2md/) | Word 文档转 Markdown 转换工具 |
 
 ## 🚀 快速开始
+
+### 星盘计算工具
+
+```bash
+cd astro-chart
+npm install
+npm start
+# 访问 http://localhost:3000
+```
 
 ### VLESS Reality 部署
 

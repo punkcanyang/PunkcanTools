@@ -1,0 +1,29 @@
+{
+    "name": "astro-chart",
+    "version": "1.0.0",
+    "description": "星盘计算工具 - 输入时间和地点，生成详细的星盘数据",
+    "main": "src/index.js",
+    "bin": {
+        "astro-chart": "./src/cli.js"
+    },
+    "scripts": {
+        "start": "node src/server.js",
+        "cli": "node src/cli.js",
+        "test": "node test/test.js"
+    },
+    "keywords": [
+        "astrology",
+        "horoscope",
+        "ephemeris",
+        "natal-chart",
+        "星盘",
+        "占星"
+    ],
+    "author": "punkcanyang",
+    "license": "MIT",
+    "dependencies": {
+        "ephemeris": "^2.2.0",
+        "express": "^4.18.2",
+        "moment-timezone": "^0.5.45"
+    }
+}
