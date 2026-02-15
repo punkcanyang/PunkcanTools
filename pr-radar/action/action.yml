@@ -1,0 +1,79 @@
+name: PR Radar Analysis
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      vision_path:
+        description: 'Path to Vision document'
+        required: false
+        default: './VISION.md'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd server
+          npm install
+
+      - name: Get PR info
+        id: pr_info
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          echo "pr_title=$PR_TITLE" >> $GITHUB_OUTPUT
+          PR_BODY="${{ github.event.pull_request.body }}"
+          echo "pr_body=$PR_BODY" >> $GITHUB_OUTPUT
+          BASE_BRANCH="${{ github.event.pull_request.base.ref }}"
+          echo "base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
+          HEAD_BRANCH="${{ github.event.pull_request.head.ref }}"
+          echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Read Vision document
+        id: vision
+        run: |
+          VISION_PATH="${{ github.event.inputs.vision_path || steps.pr_info.outputs.vision_path }}"
+          if [ -f "$VISION_PATH" ]; then
+            VISION_CONTENT=$(cat "$VISION_PATH")
+            echo "content=true" >> $GITHUB_OUTPUT
+          else
+            echo "content=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run AI Analysis
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd server
+          echo "Analyzing PR #${PR_NUMBER}..."
+          echo "PR Title: ${{ steps.pr_info.outputs.pr_title }}"
+          echo "Base: ${{ steps.pr_info.outputs.base_branch }}"
+          echo "Head: ${{ steps.pr_info.outputs.head_branch }}"
+          
+          # Note: Full AI analysis would require the database and OpenAI API
+          # This is a simplified version that outputs basic info
+
+      - name: Add comment to PR
+        if: env.GITHUB_TOKEN
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## PR Radar Analysis\n\n**Base Branch:** ${{ steps.pr_info.outputs.base_branch }}\n**Head Branch:** ${{ steps.pr_info.outputs.head_branch }}\n\n*Note: Full AI analysis requires running the PR Radar server with database and OpenAI API configured.*`
+            })

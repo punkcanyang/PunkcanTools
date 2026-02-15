@@ -1,0 +1,22 @@
+{
+  "name": "pr-radar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI驱动的PR/Issue分析工具",
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:web\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:web": "npm run dev --workspace=web",
+    "build": "npm run build --workspace=server && npm run build --workspace=web",
+    "db:generate": "npm run db:generate --workspace=server",
+    "db:push": "npm run db:push --workspace=server",
+    "db:migrate": "npm run db:migrate --workspace=server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
