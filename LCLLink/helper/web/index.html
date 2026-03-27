@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LCLLink Helper — 代理管理面板</title>
+  <style>
+    /* ============================================================
+       赛博科技风深色主题（与 Chrome 扩展统一）
+       ============================================================ */
+    :root {
+      --bg-primary: #0a0e17;
+      --bg-secondary: #111827;
+      --bg-card: #1a2035;
+      --border-color: #1e3a5f;
+      --border-glow: #00e5ff;
+      --text-primary: #e0e6ed;
+      --text-secondary: #7a8ba3;
+      --accent: #00e5ff;
+      --accent-dim: rgba(0, 229, 255, 0.15);
+      --success: #00e676;
+      --error: #ff5252;
+      --warning: #ffc107;
+      --font: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font);
+      font-size: 14px;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* 微光背景 */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(0, 229, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(0, 229, 255, 0.02) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 0;
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--accent);
+      text-shadow: 0 0 20px rgba(0, 229, 255, 0.3);
+      letter-spacing: 2px;
+    }
+
+    .header .version {
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status-badge.online {
+      background: rgba(0, 230, 118, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(0, 230, 118, 0.3);
+    }
+
+    .status-badge.offline {
+      background: rgba(255, 82, 82, 0.15);
+      color: var(--error);
+      border: 1px solid rgba(255, 82, 82, 0.3);
+    }
+
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .status-badge.online .dot { background: var(--success); }
+    .status-badge.offline .dot { background: var(--error); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--accent);
+      text-shadow: 0 0 10px rgba(0, 229, 255, 0.3);
+    }
+
+    .stat-card .label {
+      color: var(--text-secondary);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-top: 4px;
+    }
+
+    /* Section */
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .section-header h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Instance list */
+    .instance-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .instance-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: auto 1fr auto auto;
+      align-items: center;
+      gap: 16px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .instance-card:hover {
+      border-color: var(--border-glow);
+      box-shadow: 0 0 12px rgba(0, 229, 255, 0.08);
+    }
+
+    .instance-port {
+      background: var(--accent-dim);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      min-width: 70px;
+      text-align: center;
+    }
+
+    .instance-info {
+      line-height: 1.6;
+    }
+
+    .instance-info .name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .instance-info .detail {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .instance-status {
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    .instance-status.running {
+      background: rgba(0, 230, 118, 0.12);
+      color: var(--success);
+    }
+
+    .btn-disconnect {
+      background: transparent;
+      border: 1px solid rgba(255, 82, 82, 0.4);
+      color: var(--error);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: all 0.2s;
+    }
+
+    .btn-disconnect:hover {
+      background: rgba(255, 82, 82, 0.15);
+      border-color: var(--error);
+    }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 48px;
+      color: var(--text-secondary);
+      background: var(--bg-card);
+      border: 1px dashed var(--border-color);
+      border-radius: 8px;
+    }
+
+    .empty-state .icon {
+      font-size: 36px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    .empty-state p { margin-bottom: 6px; }
+    .empty-state .hint { font-size: 12px; }
+
+    /* Log panel */
+    .log-panel {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-size: 12px;
+      line-height: 1.8;
+    }
+
+    .log-panel::-webkit-scrollbar { width: 4px; }
+    .log-panel::-webkit-scrollbar-track { background: transparent; }
+    .log-panel::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 2px; }
+
+    .log-entry { color: var(--text-secondary); }
+    .log-entry .time { color: var(--text-secondary); opacity: 0.6; margin-right: 8px; }
+    .log-entry.success { color: var(--success); }
+    .log-entry.error { color: var(--error); }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 24px 0;
+      color: var(--text-secondary);
+      font-size: 11px;
+      border-top: 1px solid var(--border-color);
+      margin-top: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <h1>⚡ LCLLINK HELPER</h1>
+        <span class="version" id="versionText">v0.1.0</span>
+      </div>
+      <span class="status-badge online" id="statusBadge">
+        <span class="dot"></span>
+        <span id="statusText">运行中</span>
+      </span>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="value" id="instanceCount">0</div>
+        <div class="label">活跃实例</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="portRange">10001-10099</div>
+        <div class="label">端口池</div>
+      </div>
+      <div class="stat-card">
+        <div class="value" id="uptimeValue">0s</div>
+        <div class="label">运行时长</div>
+      </div>
+    </div>
+
+    <!-- Active Instances -->
+    <div class="section">
+      <div class="section-header">
+        <h2>活跃代理实例</h2>
+      </div>
+      <div class="instance-list" id="instanceList">
+        <div class="empty-state">
+          <div class="icon">🔌</div>
+          <p>暂无活跃的代理实例</p>
+          <p class="hint">通过 Chrome 扩展连接服务器后，实例会显示在这里</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="section">
+      <div class="section-header">
+        <h2>活动日志</h2>
+      </div>
+      <div class="log-panel" id="logPanel">
+        <div class="log-entry"><span class="time">--:--:--</span>等待数据加载...</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      LCLLink Helper · 仅监听 127.0.0.1 · 数据不会离开本机
+    </div>
+  </div>
+
+  <script>
+    /**
+     * __ai_context__: Helper Web 管理面板前端逻辑。
+     * 定时轮询 /api/status 获取实例状态，动态渲染 UI。
+     */
+
+    const API_BASE = '';
+    const POLL_INTERVAL = 2000;
+    const logs = [];
+    const MAX_LOGS = 50;
+
+    // DOM refs
+    const instanceCountEl = document.getElementById('instanceCount');
+    const uptimeValueEl = document.getElementById('uptimeValue');
+    const instanceListEl = document.getElementById('instanceList');
+    const logPanelEl = document.getElementById('logPanel');
+    const statusBadgeEl = document.getElementById('statusBadge');
+    const statusTextEl = document.getElementById('statusText');
+    const versionTextEl = document.getElementById('versionText');
+
+    // ============================================================
+    // 轮询
+    // ============================================================
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch(API_BASE + '/api/status');
+        if (!res.ok) throw new Error('API error');
+        const data = await res.json();
+        updateUI(data);
+        setOnline(true);
+      } catch {
+        setOnline(false);
+      }
+    }
+
+    function setOnline(online) {
+      statusBadgeEl.className = 'status-badge ' + (online ? 'online' : 'offline');
+      statusTextEl.textContent = online ? '运行中' : '离线';
+    }
+
+    // ============================================================
+    // UI 更新
+    // ============================================================
+
+    function updateUI(data) {
+      // Stats
+      const count = data.instances ? data.instances.length : 0;
+      instanceCountEl.textContent = count;
+      uptimeValueEl.textContent = formatUptime(data.uptime || 0);
+      if (data.version) versionTextEl.textContent = 'v' + data.version;
+
+      // Instance list
+      if (count === 0) {
+        instanceListEl.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">🔌</div>
+            <p>暂无活跃的代理实例</p>
+            <p class="hint">通过 Chrome 扩展连接服务器后，实例会显示在这里</p>
+          </div>`;
+        return;
+      }
+
+      instanceListEl.innerHTML = data.instances.map(inst => {
+        const server = inst.server || {};
+        const name = escapeHtml(server.name || '未命名');
+        const addr = escapeHtml((server.address || '?') + ':' + (server.port || '?'));
+        const proto = escapeHtml(server.protocol || '?');
+        const runTime = formatUptime(Math.floor(Date.now() / 1000) - (inst.startedAt || 0));
+
+        return `
+          <div class="instance-card">
+            <div class="instance-port">:${inst.port}</div>
+            <div class="instance-info">
+              <div class="name">${name}</div>
+              <div class="detail">${proto} → ${addr} · 已运行 ${runTime}</div>
+            </div>
+            <span class="instance-status running">● ${inst.status}</span>
+            <button class="btn-disconnect" onclick="disconnectPort(${inst.port})">断开</button>
+          </div>`;
+      }).join('');
+    }
+
+    // ============================================================
+    // 操作
+    // ============================================================
+
+    async function disconnectPort(port) {
+      try {
+        const res = await fetch(API_BASE + '/api/disconnect/' + port, { method: 'DELETE' });
+        if (res.ok) {
+          addLog('success', '已断开端口 ' + port);
+          fetchStatus();
+        } else {
+          const err = await res.json();
+          addLog('error', '断开失败: ' + (err.error || '未知错误'));
+        }
+      } catch (e) {
+        addLog('error', '请求失败: ' + e.message);
+      }
+    }
+
+    // ============================================================
+    // 工具
+    // ============================================================
+
+    function formatUptime(seconds) {
+      if (seconds < 60) return seconds + 's';
+      if (seconds < 3600) return Math.floor(seconds / 60) + 'm ' + (seconds % 60) + 's';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      return h + 'h ' + m + 'm';
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function addLog(type, message) {
+      const now = new Date();
+      const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
+        .map(n => String(n).padStart(2, '0')).join(':');
+
+      logs.unshift({ time, type, message });
+      if (logs.length > MAX_LOGS) logs.pop();
+      renderLogs();
+    }
+
+    function renderLogs() {
+      if (logs.length === 0) {
+        logPanelEl.innerHTML = '<div class="log-entry"><span class="time">--:--:--</span>暂无日志</div>';
+        return;
+      }
+      logPanelEl.innerHTML = logs.map(l =>
+        `<div class="log-entry ${l.type}"><span class="time">${l.time}</span>${escapeHtml(l.message)}</div>`
+      ).join('');
+    }
+
+    // ============================================================
+    // 启动
+    // ============================================================
+    addLog('', 'Web 管理面板已加载');
+    fetchStatus();
+    setInterval(fetchStatus, POLL_INTERVAL);
+  </script>
+</body>
+</html>

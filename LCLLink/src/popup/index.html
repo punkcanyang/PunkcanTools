@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LCLLink</title>
+  <link rel="stylesheet" href="./popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- 顶部状态栏 -->
+    <header class="header">
+      <div class="logo-area">
+        <div class="logo-icon" id="statusIndicator">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <span class="logo-text">LCLLink</span>
+      </div>
+      <span class="version">v0.1.0</span>
+    </header>
+
+    <!-- 连接状态区 -->
+    <section class="status-section">
+      <div class="status-badge" id="statusBadge">
+        <span class="status-dot"></span>
+        <span class="status-text" id="statusText">未连接</span>
+      </div>
+      <div class="connection-info" id="connectionInfo">
+        <span class="info-label">连接时长</span>
+        <span class="info-value" id="connDuration">--:--:--</span>
+      </div>
+    </section>
+
+    <!-- 连接/断开按钮 -->
+    <button class="connect-btn" id="connectBtn" type="button">
+      <span class="btn-icon" id="btnIcon">⚡</span>
+      <span class="btn-text" id="btnText">连接</span>
+    </button>
+
+    <!-- 服务器列表 -->
+    <section class="server-section">
+      <div class="section-header">
+        <h3>服务器</h3>
+        <button class="icon-btn" id="openOptionsBtn" title="管理服务器">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+        </button>
+      </div>
+      <div class="server-list" id="serverList">
+        <div class="empty-state">
+          <p>尚未添加服务器</p>
+          <button class="link-btn" id="addServerBtn">+ 添加服务器</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="./popup.ts"></script>
+</body>
+</html>

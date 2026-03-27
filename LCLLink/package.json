@@ -1,0 +1,17 @@
+{
+  "name": "lcllink",
+  "version": "0.1.0",
+  "description": "Chrome 扩展 - 多协议代理客户端（VLESS/Trojan/Shadowsocks）",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "typescript": "^5.7.0",
+    "vite": "^6.2.0"
+  }
+}

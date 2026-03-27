@@ -1,0 +1,9 @@
+{
+  "name": "com.punkcan.lcllink.helper",
+  "description": "LCLLink Native Messaging Helper - 多协议代理管理器",
+  "path": "/Users/USER/Library/Application Support/LCLLink/lcllink-helper",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://EXTENSION_ID/"
+  ]
+}

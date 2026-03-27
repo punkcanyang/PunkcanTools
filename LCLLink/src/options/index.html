@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LCLLink - 设置</title>
+  <link rel="stylesheet" href="./options.css">
+</head>
+<body>
+  <div class="options-container">
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+          <span>LCLLink</span>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#servers" class="nav-item active" data-tab="servers">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="8" rx="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2"/>
+            <circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/>
+          </svg>
+          服务器管理
+        </a>
+        <a href="#logs" class="nav-item" data-tab="logs">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+          </svg>
+          日志
+        </a>
+        <a href="#about" class="nav-item" data-tab="about">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          关于
+        </a>
+      </nav>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="main-content">
+      <!-- 服务器管理页 -->
+      <section class="tab-content active" id="tab-servers">
+        <div class="content-header">
+          <h1>服务器管理</h1>
+          <div class="header-actions">
+            <button class="secondary-btn" id="importUriBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              导入链接
+            </button>
+            <button class="primary-btn" id="addServerBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              添加服务器
+            </button>
+          </div>
+        </div>
+
+        <!-- URI 导入面板（可折叠） -->
+        <div class="import-panel" id="importPanel" style="display:none">
+          <div class="import-header">
+            <h3>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+              粘贴分享链接
+            </h3>
+            <button class="close-panel-btn" id="closeImportPanel">&times;</button>
+          </div>
+          <textarea class="import-textarea" id="importTextarea" 
+            placeholder="支持以下格式，每行一个：&#10;vless://uuid@host:port?type=ws&amp;security=tls&amp;sni=xxx#名称&#10;trojan://password@host:port?sni=xxx#名称&#10;ss://base64@host:port#名称"
+            rows="5"></textarea>
+          <div class="import-actions">
+            <div class="import-result" id="importResult"></div>
+            <button class="primary-btn" id="doImportBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="16 16 12 12 8 16"/>
+                <line x1="12" y1="12" x2="12" y2="21"/>
+                <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+              </svg>
+              解析并导入
+            </button>
+          </div>
+        </div>
+
+        <div class="server-table" id="serverTable">
+          <div class="table-empty">
+            <p>尚未添加任何服务器配置</p>
+            <p class="hint">点击「添加服务器」手动配置，或「导入链接」粘贴分享 URI</p>
+          </div>
+        </div>
+
+        <!-- 添加/编辑服务器表单（模态框） -->
+        <div class="modal-overlay" id="serverModal">
+          <div class="modal">
+            <div class="modal-header">
+              <h2 id="modalTitle">添加服务器</h2>
+              <button class="close-btn" id="closeModalBtn">&times;</button>
+            </div>
+            <form class="server-form" id="serverForm">
+              <!-- 基础配置 -->
+              <div class="form-section">
+                <h3>基本信息</h3>
+                <div class="form-row">
+                  <label>
+                    <span>名称</span>
+                    <input type="text" id="serverName" placeholder="My Server" required>
+                  </label>
+                  <label>
+                    <span>协议</span>
+                    <select id="serverProtocol">
+                      <option value="vless">VLESS</option>
+                      <option value="trojan">Trojan</option>
+                      <option value="shadowsocks">Shadowsocks</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label class="flex-2">
+                    <span>服务器地址</span>
+                    <input type="text" id="serverAddress" placeholder="example.com" required>
+                  </label>
+                  <label class="flex-1">
+                    <span>端口</span>
+                    <input type="number" id="serverPort" placeholder="443" min="1" max="65535" required>
+                  </label>
+                </div>
+              </div>
+
+              <!-- VLESS 专有配置 -->
+              <div class="form-section protocol-section" id="vlessSection">
+                <h3>VLESS 配置</h3>
+                <label>
+                  <span>UUID</span>
+                  <input type="text" id="vlessUuid" placeholder="550e8400-e29b-41d4-a716-446655440000">
+                </label>
+                <div class="form-row">
+                  <label>
+                    <span>加密</span>
+                    <select id="vlessEncryption">
+                      <option value="none">none</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Flow</span>
+                    <select id="vlessFlow">
+                      <option value="">无</option>
+                      <option value="xtls-rprx-vision">xtls-rprx-vision</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Trojan 专有配置 -->
+              <div class="form-section protocol-section" id="trojanSection" style="display:none">
+                <h3>Trojan 配置</h3>
+                <label>
+                  <span>密码</span>
+                  <input type="password" id="trojanPassword" placeholder="your-password">
+                </label>
+              </div>
+
+              <!-- Shadowsocks 专有配置 -->
+              <div class="form-section protocol-section" id="ssSection" style="display:none">
+                <h3>Shadowsocks 配置</h3>
+                <div class="form-row">
+                  <label>
+                    <span>加密方法</span>
+                    <select id="ssMethod">
+                      <option value="aes-128-gcm">aes-128-gcm</option>
+                      <option value="aes-256-gcm">aes-256-gcm</option>
+                      <option value="chacha20-ietf-poly1305">chacha20-ietf-poly1305</option>
+                      <option value="2022-blake3-aes-128-gcm">2022-blake3-aes-128-gcm</option>
+                      <option value="2022-blake3-aes-256-gcm">2022-blake3-aes-256-gcm</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>密码</span>
+                    <input type="password" id="ssPassword" placeholder="your-password">
+                  </label>
+                </div>
+              </div>
+
+              <!-- 传输配置 -->
+              <div class="form-section">
+                <h3>传输设置</h3>
+                <div class="form-row">
+                  <label>
+                    <span>传输方式</span>
+                    <select id="transportType">
+                      <option value="websocket">WebSocket</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>WebSocket 路径</span>
+                    <input type="text" id="wsPath" placeholder="/" value="/">
+                  </label>
+                </div>
+                <label>
+                  <span>Host（WebSocket 头）</span>
+                  <input type="text" id="wsHost" placeholder="example.com">
+                </label>
+              </div>
+
+              <!-- TLS 配置 -->
+              <div class="form-section">
+                <h3>TLS 安全</h3>
+                <div class="form-row">
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="tlsEnabled" checked>
+                    <span>启用 TLS</span>
+                  </label>
+                  <label class="checkbox-label">
+                    <input type="checkbox" id="tlsAllowInsecure">
+                    <span>允许不安全连接</span>
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label>
+                    <span>SNI（Server Name）</span>
+                    <input type="text" id="tlsSni" placeholder="example.com">
+                  </label>
+                  <label>
+                    <span>Fingerprint</span>
+                    <select id="tlsFingerprint">
+                      <option value="chrome">Chrome</option>
+                      <option value="firefox">Firefox</option>
+                      <option value="safari">Safari</option>
+                      <option value="random">Random</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="button" class="secondary-btn" id="cancelBtn">取消</button>
+                <button type="submit" class="primary-btn">保存</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- 日志页 -->
+      <section class="tab-content" id="tab-logs">
+        <div class="content-header">
+          <h1>日志</h1>
+          <button class="secondary-btn" id="clearLogsBtn">清除日志</button>
+        </div>
+        <div class="log-container" id="logContainer">
+          <pre class="log-output" id="logOutput">加载中...</pre>
+        </div>
+      </section>
+
+      <!-- 关于页 -->
+      <section class="tab-content" id="tab-about">
+        <div class="content-header">
+          <h1>关于 LCLLink</h1>
+        </div>
+        <div class="about-content">
+          <div class="about-logo">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </div>
+          <h2>LCLLink</h2>
+          <p class="version-info">版本 0.1.0</p>
+          <p class="description">多协议代理客户端 Chrome 扩展</p>
+          <div class="protocol-support">
+            <h3>Phase 1 支持的协议</h3>
+            <ul>
+              <li><span class="badge green">✓</span> VLESS (WebSocket)</li>
+              <li><span class="badge green">✓</span> Trojan (WebSocket)</li>
+              <li><span class="badge green">✓</span> Shadowsocks (WebSocket)</li>
+            </ul>
+            <h3>Phase 2 计划支持</h3>
+            <ul>
+              <li><span class="badge yellow">⏳</span> Hysteria 2</li>
+              <li><span class="badge yellow">⏳</span> TUIC v5</li>
+              <li><span class="badge yellow">⏳</span> WireGuard</li>
+              <li><span class="badge yellow">⏳</span> OpenVPN</li>
+              <li><span class="badge yellow">⏳</span> IKEv2 / IPsec</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./options.ts"></script>
+</body>
+</html>

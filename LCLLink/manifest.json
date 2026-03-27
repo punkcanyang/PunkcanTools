@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "LCLLink",
+  "version": "0.1.0",
+  "description": "多协议代理客户端 - 支持 VLESS / Trojan / Shadowsocks 等协议",
+
+  "permissions": [
+    "proxy",
+    "storage",
+    "alarms",
+    "activeTab",
+    "nativeMessaging"
+  ],
+
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "popup/index.html",
+    "default_icon": {
+      "16": "assets/icons/icon16.png",
+      "32": "assets/icons/icon32.png",
+      "48": "assets/icons/icon48.png",
+      "128": "assets/icons/icon128.png"
+    }
+  },
+
+  "options_page": "options/index.html",
+
+  "icons": {
+    "16": "assets/icons/icon16.png",
+    "32": "assets/icons/icon32.png",
+    "48": "assets/icons/icon48.png",
+    "128": "assets/icons/icon128.png"
+  },
+
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}
