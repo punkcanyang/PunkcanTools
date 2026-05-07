@@ -1,0 +1,112 @@
+:root {
+  --ink: #1d1812;
+  --muted: #675a4c;
+  --line: #d3c2aa;
+  --panel: rgba(252, 247, 238, 0.9);
+  --accent: #95542f;
+  --accent-weak: rgba(149, 84, 47, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 15% 20%, #fff8ef, transparent 45%),
+    radial-gradient(circle at 85% 80%, #f0e4d4, transparent 48%),
+    linear-gradient(160deg, #f7efe3, #ecdeca);
+  color: var(--ink);
+  font: 16px/1.5 'Avenir Next', 'SF Pro Text', 'Segoe UI', sans-serif;
+}
+
+.app-shell {
+  width: min(600px, calc(100vw - 40px));
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: var(--panel);
+  padding: 28px;
+  box-shadow: 0 26px 80px rgba(39, 20, 6, 0.14);
+}
+
+.heading h1 {
+  margin: 4px 0 0;
+  font: 700 36px/1.1 'Avenir Next', 'SF Pro Display', sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.subtext {
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+
+.dropzone {
+  margin-top: 20px;
+  min-height: 220px;
+  border-radius: 20px;
+  border: 2px dashed var(--line);
+  background: rgba(255, 255, 255, 0.55);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 18px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+
+.dropzone[data-dragging='true'] {
+  border-color: var(--accent);
+  background: var(--accent-weak);
+  transform: translateY(-2px);
+}
+
+#convert-button {
+  margin-top: 16px;
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  padding: 13px 16px;
+  font: 600 15px/1 'Avenir Next', 'SF Pro Text', sans-serif;
+  color: #fff;
+  background: linear-gradient(135deg, #9f5e37, #7d3f1f);
+  cursor: pointer;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+#convert-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#convert-button:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.status {
+  min-height: 24px;
+  margin: 12px 0 0;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 20px;
+  }
+
+  .heading h1 {
+    font-size: 29px;
+  }
+}

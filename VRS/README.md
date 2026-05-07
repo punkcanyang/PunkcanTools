@@ -44,6 +44,66 @@ chmod +x *.sh */*.sh
 
 选择想要的协议，运行对应的安装脚本即可。
 
+## AI 自动部署第一版范围
+
+AI 自动部署第一版只支援根目录的 VLESS + Reality，不要求全部协议都能由 AI 自动部署。这个范围用于让 AI 通过 command 完成远端服务器设定、取回设定资料，并交给本地 command line client 连线。
+
+- 远端协议：VLESS + Reality
+- 远端核心：Xray-core
+- 本地 Client 核心：Xray-core
+- 本地 Client 平台：macOS + Linux
+- 设定输出：固定提供 JSON/YAML schema，同时保留 `vless://` 分享链接
+- 多线路备援：第一版限定为多个 VLESS + Reality 节点，切换条件依序为手动优先级、连通性、延迟、失败次数
+
+其他协议第一阶段保留给人类手动安装使用。等 VLESS + Reality 的 AI command 流程稳定后，再评估是否扩展到其他协议。
+
+### AI Command 合约
+
+VLESS + Reality 安装脚本支援非互动参数，适合 AI 通过 SSH 执行：
+
+```bash
+sudo bash install.sh --yes --port 443 --dest www.microsoft.com --dest-port 443 --json
+sudo bash install-centos.sh --yes --port 443 --dest www.microsoft.com --dest-port 443 --json
+```
+
+若使用 sudo 使用者，可先上传或 clone 项目，再执行：
+
+```bash
+ssh user@server 'cd /path/to/vless-reality-setup && sudo bash install.sh --yes --json'
+```
+
+可用参数：
+
+| 参数 | 说明 |
+|------|------|
+| `--port PORT` | 指定 VLESS 监听端口；明确指定时若端口被占用会直接失败 |
+| `--dest HOST` | 指定 Reality 回落目标和 SNI，默认 `www.microsoft.com` |
+| `--dest-port PORT` | 指定 Reality 回落目标端口，默认 `443` |
+| `--uuid UUID` | 指定客户端 UUID；未指定时自动生成 |
+| `--short-id HEX` | 指定 Reality short ID；未指定时自动生成 |
+| `--server-ip IP` | 指定写入客户端设定的服务器地址；未指定时自动检测公网 IPv4 |
+| `--json` | 安装完成后在 stdout 输出 JSON 合约 |
+| `--yaml` | 安装完成后在 stdout 输出 YAML 合约 |
+| `--yes` / `--non-interactive` | 非互动模式；遇到 unsupported OS 或网络检测失败时直接停止 |
+| `--replace` | 明确允许覆盖既有 Xray 配置 |
+
+安装完成后固定生成：
+
+| 路径 | 说明 |
+|------|------|
+| `/usr/local/etc/xray/vless-reality.json` | AI 读取用 JSON schema |
+| `/usr/local/etc/xray/vless-reality.yaml` | AI 读取用 YAML schema |
+| `/usr/local/etc/xray/vless-link.txt` | `vless://` 分享链接 |
+| `/usr/local/etc/xray/client-config.txt` | 人类可读完整客户端配置 |
+
+正式合约文件在 `docs/ai-contract/`：
+
+- `docs/ai-contract/vless-reality.schema.json`
+- `docs/ai-contract/vless-reality.example.json`
+- `docs/ai-contract/vless-reality.example.yaml`
+
+JSON/YAML 合约字段包含 `schemaVersion`、`protocol`、`core`、`server`、`port`、`uuid`、`flow`、`transport`、`security`、`sni`、`dest`、`destPort`、`publicKey`、`shortId`、`fingerprint`、`shareLink`、`paths`、`service`、`healthCheck`。回报日志、PR、issue 或聊天内容时必须遮罩真实 `uuid`、`publicKey`、`shortId`、`shareLink` 与真实服务器地址。
+
 ## 📁 项目结构
 
 ```
@@ -111,6 +171,13 @@ vless-reality-setup/
 ```bash
 sudo bash install.sh              # Debian/Ubuntu
 sudo bash install-centos.sh       # CentOS/RHEL
+```
+
+安装脚本会在配置防火墙前保留 SSH 端口，避免远端部署后失联。若机器上已存在其他 Xray 配置，脚本会停止并避免覆盖；确认要替换时才使用：
+
+```bash
+sudo bash install.sh --replace
+sudo bash install-centos.sh --replace
 ```
 
 ### VLESS + WebSocket

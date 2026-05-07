@@ -54,6 +54,61 @@ chmod +x *.sh
 sudo bash install-centos.sh
 ```
 
+## AI Automation Scope
+
+The first AI automation target is VLESS + Reality only. Other protocols remain manual-first until this command flow is stable.
+
+- Remote protocol: VLESS + Reality
+- Remote core: Xray-core
+- Local client core: Xray-core
+- Local client platforms: macOS + Linux
+- Output contract: fixed JSON/YAML schema, plus the existing `vless://` share link
+- Multi-line failover: multiple VLESS + Reality nodes ordered by manual priority, connectivity, latency, then failure count
+
+The installer preserves SSH firewall access before enabling firewall rules. If an existing Xray config is detected, the installer stops by default to avoid overwriting another protocol. Use `--replace` only when replacement is intentional:
+
+```bash
+sudo bash install.sh --replace
+sudo bash install-centos.sh --replace
+```
+
+Automation-friendly examples:
+
+```bash
+sudo bash install.sh --yes --port 443 --dest www.microsoft.com --dest-port 443 --json
+sudo bash install-centos.sh --yes --port 443 --dest www.microsoft.com --dest-port 443 --json
+```
+
+Supported automation flags:
+
+| Flag | Description |
+|------|-------------|
+| `--port PORT` | Set VLESS listen port; if explicitly set and occupied, installation fails |
+| `--dest HOST` | Set Reality destination and SNI |
+| `--dest-port PORT` | Set Reality destination port |
+| `--uuid UUID` | Use a fixed client UUID |
+| `--short-id HEX` | Use a fixed Reality short ID |
+| `--server-ip IP` | Use a fixed server address in client output |
+| `--json` | Print JSON contract after installation |
+| `--yaml` | Print YAML contract after installation |
+| `--yes`, `--non-interactive` | Do not prompt; fail on risky conditions |
+| `--replace` | Explicitly allow replacing an existing Xray config |
+
+Generated machine-readable outputs:
+
+- `/usr/local/etc/xray/vless-reality.json`
+- `/usr/local/etc/xray/vless-reality.yaml`
+- `/usr/local/etc/xray/vless-link.txt`
+- `/usr/local/etc/xray/client-config.txt`
+
+Formal contract files:
+
+- `docs/ai-contract/vless-reality.schema.json`
+- `docs/ai-contract/vless-reality.example.json`
+- `docs/ai-contract/vless-reality.example.yaml`
+
+Mask real `uuid`, `publicKey`, `shortId`, `shareLink`, and real server addresses in logs, issues, pull requests, and chat reports.
+
 ### Uninstall
 
 ```bash

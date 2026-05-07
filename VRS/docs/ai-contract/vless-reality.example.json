@@ -1,0 +1,38 @@
+{
+  "schemaVersion": "vrs.vless-reality.v1",
+  "generatedAt": "2026-05-07T00:00:00Z",
+  "protocol": "vless-reality",
+  "core": "xray-core",
+  "server": "203.0.113.10",
+  "port": 443,
+  "uuid": "11111111-1111-4111-8111-111111111111",
+  "flow": "xtls-rprx-vision",
+  "transport": "tcp",
+  "security": "reality",
+  "sni": "www.microsoft.com",
+  "dest": "www.microsoft.com",
+  "destPort": 443,
+  "publicKey": "PUBLIC_KEY_EXAMPLE",
+  "shortId": "abcd1234",
+  "fingerprint": "chrome",
+  "shareLink": "vless://11111111-1111-4111-8111-111111111111@203.0.113.10:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.microsoft.com&fp=chrome&pbk=PUBLIC_KEY_EXAMPLE&sid=abcd1234&type=tcp&headerType=none#VLESS-Reality",
+  "paths": {
+    "xrayConfig": "/usr/local/etc/xray/config.json",
+    "clientConfig": "/usr/local/etc/xray/client-config.txt",
+    "shareLink": "/usr/local/etc/xray/vless-link.txt",
+    "qrCode": "/usr/local/etc/xray/vless-qrcode.png",
+    "json": "/usr/local/etc/xray/vless-reality.json",
+    "yaml": "/usr/local/etc/xray/vless-reality.yaml"
+  },
+  "service": {
+    "name": "xray",
+    "status": "active",
+    "statusCommand": "systemctl status xray",
+    "restartCommand": "systemctl restart xray",
+    "logCommand": "journalctl -u xray -f"
+  },
+  "healthCheck": {
+    "command": "/usr/local/bin/xray-health-check.sh",
+    "cron": "0 * * * * /usr/local/bin/xray-health-check.sh >> /var/log/xray/health-check.log 2>&1"
+  }
+}

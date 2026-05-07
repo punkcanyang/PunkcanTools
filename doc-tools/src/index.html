@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doc Tools</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="hero">
+      <p class="hero-tag">Document Converter</p>
+      <h1>Doc Tools</h1>
+      <p class="hero-subtitle">把文件轉換流程集中在一個桌面工具裡。</p>
+      <p class="build-stamp" id="build-stamp">Build 2026-04-18 09:55</p>
+    </header>
+
+    <nav class="tab-nav" aria-label="conversion tabs">
+      <button class="tab-button active" data-tab="html2pdf">HTML -> PDF</button>
+      <button class="tab-button" data-tab="docx2md">Word -> Markdown</button>
+    </nav>
+
+    <section class="panel active" id="panel-html2pdf">
+      <h2>HTML -> PDF</h2>
+      <p class="panel-note">拖入 `.html` 或 `.htm`，輸出 PDF，可選擇是否顯示頁碼。</p>
+      <div class="dropzone" id="html-dropzone">
+        <span id="html-file-name">拖曳 HTML 檔案到這裡，或點擊選檔</span>
+      </div>
+      <input id="html-input" class="picker-input" type="file" accept=".html,.htm,text/html">
+      <label class="option-toggle" for="html-page-numbers">
+        <input id="html-page-numbers" type="checkbox" checked>
+        <span>在每頁底部置中顯示頁碼</span>
+      </label>
+      <button id="html-convert" class="action-button" type="button" disabled>輸出 PDF</button>
+      <p id="html-status" class="status-text" role="status">尚未選擇檔案</p>
+    </section>
+
+    <section class="panel" id="panel-docx2md">
+      <h2>Word -> Markdown</h2>
+      <p class="panel-note">拖入 `.docx`，輸出 `.md`，適合知識庫與技術文檔整理。</p>
+      <div class="dropzone" id="docx-dropzone">
+        <span id="docx-file-name">拖曳 DOCX 檔案到這裡，或點擊選檔</span>
+      </div>
+      <input id="docx-input" class="picker-input" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+      <button id="docx-convert" class="action-button" type="button" disabled>輸出 Markdown</button>
+      <p id="docx-status" class="status-text" role="status">尚未選擇檔案</p>
+    </section>
+  </main>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

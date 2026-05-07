@@ -34,12 +34,23 @@ XRAY_CONFIG_FILE="${XRAY_CONFIG_DIR}/config.json"
 CLIENT_CONFIG_FILE="${XRAY_CONFIG_DIR}/client-config.txt"
 VLESS_LINK_FILE="${XRAY_CONFIG_DIR}/vless-link.txt"
 QR_CODE_FILE="${XRAY_CONFIG_DIR}/vless-qrcode.png"
+STRUCTURED_JSON_FILE="${XRAY_CONFIG_DIR}/vless-reality.json"
+STRUCTURED_YAML_FILE="${XRAY_CONFIG_DIR}/vless-reality.yaml"
+XRAY_PROTOCOL_MARKER="${XRAY_CONFIG_DIR}/vrs-protocol"
+XRAY_PROTOCOL_ID="vless-reality"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 默认配置
 PORT=443
 DEST="www.microsoft.com"
 DEST_PORT=443
+REPLACE_EXISTING=false
+NON_INTERACTIVE=false
+PORT_EXPLICIT=false
+UUID=""
+SHORT_ID=""
+SERVER_IP_OVERRIDE=""
+OUTPUT_FORMAT="text"
 
 #-------------------------------------------------------------------------------
 # 工具函数
@@ -58,6 +69,120 @@ log_error() {
 
 log_success() {
     echo -e "${GREEN}[✓]${NC} $1"
+}
+
+show_usage() {
+    cat << EOF
+用法: $0 [选项]
+
+选项:
+  --port PORT          指定 VLESS 监听端口
+  --dest HOST          指定 Reality 回落目标和 SNI，默认 www.microsoft.com
+  --dest-port PORT     指定 Reality 回落目标端口，默认 443
+  --uuid UUID          指定客户端 UUID；未指定时自动生成
+  --short-id HEX       指定 Reality short ID；未指定时自动生成
+  --server-ip IP       指定写入客户端设定的服务器地址；未指定时自动检测公网 IPv4
+  --json               安装完成后在 stdout 输出 JSON 合约
+  --yaml               安装完成后在 stdout 输出 YAML 合约
+  --yes                非互动模式；遇到风险时直接失败，不询问继续
+  --non-interactive    同 --yes
+  --replace            允许覆盖既有 Xray 配置
+  -h, --help           显示此帮助
+EOF
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --port)
+                [[ $# -ge 2 ]] || { log_error "--port 需要参数"; exit 1; }
+                PORT="$2"
+                PORT_EXPLICIT=true
+                shift 2
+                ;;
+            --dest)
+                [[ $# -ge 2 ]] || { log_error "--dest 需要参数"; exit 1; }
+                DEST="$2"
+                shift 2
+                ;;
+            --dest-port)
+                [[ $# -ge 2 ]] || { log_error "--dest-port 需要参数"; exit 1; }
+                DEST_PORT="$2"
+                shift 2
+                ;;
+            --uuid)
+                [[ $# -ge 2 ]] || { log_error "--uuid 需要参数"; exit 1; }
+                UUID="$2"
+                shift 2
+                ;;
+            --short-id)
+                [[ $# -ge 2 ]] || { log_error "--short-id 需要参数"; exit 1; }
+                SHORT_ID="$2"
+                shift 2
+                ;;
+            --server-ip)
+                [[ $# -ge 2 ]] || { log_error "--server-ip 需要参数"; exit 1; }
+                SERVER_IP_OVERRIDE="$2"
+                shift 2
+                ;;
+            --json)
+                OUTPUT_FORMAT="json"
+                shift
+                ;;
+            --yaml)
+                OUTPUT_FORMAT="yaml"
+                shift
+                ;;
+            --yes|--non-interactive)
+                NON_INTERACTIVE=true
+                shift
+                ;;
+            --replace)
+                REPLACE_EXISTING=true
+                shift
+                ;;
+            -h|--help)
+                show_usage
+                exit 0
+                ;;
+            *)
+                log_error "未知选项: $1"
+                show_usage
+                exit 1
+                ;;
+        esac
+    done
+}
+
+is_valid_port() {
+    [[ "$1" =~ ^[0-9]+$ ]] && [[ "$1" -ge 1 && "$1" -le 65535 ]]
+}
+
+validate_args() {
+    if ! is_valid_port "$PORT"; then
+        log_error "无效端口: $PORT"
+        exit 1
+    fi
+
+    if ! is_valid_port "$DEST_PORT"; then
+        log_error "无效 Reality 目标端口: $DEST_PORT"
+        exit 1
+    fi
+
+    if [[ -n "$UUID" && ! "$UUID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+        log_error "无效 UUID: $UUID"
+        exit 1
+    fi
+
+    if [[ -n "$SHORT_ID" && ! "$SHORT_ID" =~ ^[0-9a-fA-F]{2,16}$ ]]; then
+        log_error "无效 short ID，必须是 2 到 16 位十六进制"
+        exit 1
+    fi
+
+    if [[ -n "$SHORT_ID" && $(( ${#SHORT_ID} % 2 )) -ne 0 ]]; then
+        log_error "无效 short ID，长度必须为偶数"
+        exit 1
+    fi
 }
 
 # 进度指示器
@@ -104,7 +229,11 @@ check_system() {
     # 支持 Debian 和 Ubuntu
     if [[ "$ID" != "debian" && "$ID" != "ubuntu" ]]; then
         log_warn "此脚本针对 Debian/Ubuntu 系统优化，当前系统: $ID"
-        read -p "是否继续安装？(y/N): " confirm
+        if [[ "$NON_INTERACTIVE" == "true" ]]; then
+            log_error "非互动模式不允许在未明确支援的系统上继续"
+            exit 1
+        fi
+        read -r -p "是否继续安装？(y/N): " confirm
         if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
             exit 1
         fi
@@ -122,7 +251,11 @@ check_network() {
     fi
     
     echo -e "\r${YELLOW}[!]${NC} 网络检测失败 (可能是 DNS 或防火墙问题)"
-    read -p "是否继续安装？(y/N): " confirm
+    if [[ "$NON_INTERACTIVE" == "true" ]]; then
+        log_error "非互动模式下网络检测失败，停止安装"
+        exit 1
+    fi
+    read -r -p "是否继续安装？(y/N): " confirm
     if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
         log_error "安装已取消"
         exit 1
@@ -142,6 +275,11 @@ check_port() {
         # 显示占用进程
         local process=$(ss -tlnp 2>/dev/null | grep ":${PORT} " | head -1 || netstat -tlnp 2>/dev/null | grep ":${PORT} " | head -1)
         log_info "占用进程: $process"
+
+        if [[ "$PORT_EXPLICIT" == "true" ]]; then
+            log_error "已明确指定端口 ${PORT}，不会自动切换备用端口"
+            exit 1
+        fi
         
         # 自动切换到备用端口
         PORT=8443
@@ -155,6 +293,73 @@ check_port() {
     fi
     
     log_success "将使用端口: ${PORT}"
+}
+
+check_xray_config_conflict() {
+    if [[ ! -f "$XRAY_CONFIG_FILE" ]]; then
+        return 0
+    fi
+
+    local existing_protocol="unknown"
+    if [[ -f "$XRAY_PROTOCOL_MARKER" ]]; then
+        existing_protocol=$(cat "$XRAY_PROTOCOL_MARKER")
+    fi
+
+    if [[ "$existing_protocol" == "$XRAY_PROTOCOL_ID" ]]; then
+        log_warn "检测到既有 VLESS + Reality 配置，本次安装会更新该配置"
+        return 0
+    fi
+
+    if [[ "$REPLACE_EXISTING" != "true" ]]; then
+        log_error "检测到既有 Xray 配置: $XRAY_CONFIG_FILE"
+        log_error "为避免覆盖其他 Xray 协议，请先卸载旧配置，或明确使用: sudo bash $0 --replace"
+        exit 1
+    fi
+
+    log_warn "--replace 已指定，将覆盖既有 Xray 配置 (${existing_protocol})"
+}
+
+detect_ssh_ports() {
+    {
+        if [[ -n "${SSH_CONNECTION:-}" ]]; then
+            echo "$SSH_CONNECTION" | awk '{print $4}'
+        fi
+
+        if command -v sshd > /dev/null 2>&1; then
+            sshd -T 2>/dev/null | awk '$1 == "port" {print $2}'
+        fi
+
+        if [[ -f /etc/ssh/sshd_config ]]; then
+            awk 'tolower($1) == "port" && $2 ~ /^[0-9]+$/ {print $2}' /etc/ssh/sshd_config
+        fi
+
+        echo "22"
+    } | awk '/^[0-9]+$/ && $1 > 0 && $1 < 65536 && !seen[$1]++'
+}
+
+ensure_ssh_ufw_rules() {
+    local ssh_ports
+    ssh_ports=$(detect_ssh_ports)
+
+    while IFS= read -r ssh_port; do
+        if [[ -n "$ssh_port" ]]; then
+            ufw allow "${ssh_port}/tcp" > /dev/null 2>&1 || true
+            log_info "已确保 UFW 允许 SSH 端口 ${ssh_port}/tcp"
+        fi
+    done <<< "$ssh_ports"
+}
+
+ensure_ssh_iptables_rules() {
+    local ssh_ports
+    ssh_ports=$(detect_ssh_ports)
+
+    while IFS= read -r ssh_port; do
+        if [[ -n "$ssh_port" ]]; then
+            iptables -C INPUT -p tcp --dport "$ssh_port" -j ACCEPT 2>/dev/null || \
+                iptables -I INPUT -p tcp --dport "$ssh_port" -j ACCEPT
+            log_info "已确保 iptables 允许 SSH 端口 ${ssh_port}/tcp"
+        fi
+    done <<< "$ssh_ports"
 }
 
 #-------------------------------------------------------------------------------
@@ -249,10 +454,14 @@ generate_keys() {
     fi
     
     # 生成 UUID
-    UUID=$(cat /proc/sys/kernel/random/uuid)
+    if [[ -z "$UUID" ]]; then
+        UUID=$(cat /proc/sys/kernel/random/uuid)
+    fi
     
     # 生成 Short ID (8位16进制)
-    SHORT_ID=$(openssl rand -hex 4)
+    if [[ -z "$SHORT_ID" ]]; then
+        SHORT_ID=$(openssl rand -hex 4)
+    fi
     
     log_success "密钥生成完成"
     log_info "Private Key: ${PRIVATE_KEY:0:10}..."
@@ -324,6 +533,8 @@ generate_xray_config() {
 }
 EOF
 
+    echo "$XRAY_PROTOCOL_ID" > "$XRAY_PROTOCOL_MARKER"
+
     # 创建日志目录
     mkdir -p /var/log/xray
     
@@ -362,18 +573,22 @@ configure_firewall() {
     # 检测防火墙类型
     if command -v ufw &> /dev/null; then
         # 使用 UFW
-        ufw allow ${PORT}/tcp > /dev/null 2>&1 || true
+        ensure_ssh_ufw_rules
+        ufw allow "${PORT}/tcp" > /dev/null 2>&1 || true
         ufw --force enable > /dev/null 2>&1 || true
-        log_success "UFW 防火墙已配置，端口 ${PORT} 已开放"
+        log_success "UFW 防火墙已配置，端口 ${PORT} 已开放，SSH 端口已保留"
     elif command -v iptables &> /dev/null; then
         # 使用 iptables
-        iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p tcp --dport "${PORT}" -j ACCEPT
         
         # 保存规则
         if command -v iptables-save &> /dev/null; then
             iptables-save > /etc/iptables.rules
             
             # 创建开机恢复规则
+            mkdir -p /etc/network/if-pre-up.d
             cat > /etc/network/if-pre-up.d/iptables << 'EOF'
 #!/bin/sh
 iptables-restore < /etc/iptables.rules
@@ -475,7 +690,11 @@ generate_client_config() {
     log_info "生成客户端配置..."
     
     # 获取服务器公网 IP
-    SERVER_IP=$(curl -s4 ifconfig.me || curl -s4 ip.sb || curl -s4 ipinfo.io/ip)
+    if [[ -n "$SERVER_IP_OVERRIDE" ]]; then
+        SERVER_IP="$SERVER_IP_OVERRIDE"
+    else
+        SERVER_IP=$(curl -s4 ifconfig.me || curl -s4 ip.sb || curl -s4 ipinfo.io/ip)
+    fi
     
     if [[ -z "$SERVER_IP" ]]; then
         log_warn "无法获取公网 IP，请手动替换配置中的 SERVER_IP"
@@ -487,11 +706,13 @@ generate_client_config() {
     
     # 保存纯链接文件 (方便复制)
     echo -n "$VLESS_LINK" > "$VLESS_LINK_FILE"
+    chmod 600 "$VLESS_LINK_FILE"
     log_success "VLESS 分享链接已保存到 ${VLESS_LINK_FILE}"
     
     # 生成二维码图片
     if command -v qrencode &> /dev/null; then
         qrencode -o "$QR_CODE_FILE" -s 10 -m 2 "$VLESS_LINK"
+        chmod 600 "$QR_CODE_FILE"
         log_success "二维码图片已保存到 ${QR_CODE_FILE}"
     fi
     
@@ -559,12 +780,122 @@ ${VLESS_LINK}
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
 
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "完整配置已保存到 ${CLIENT_CONFIG_FILE}"
+}
+
+json_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+write_structured_outputs() {
+    log_info "生成 AI 结构化输出..."
+
+    local service_status
+    service_status=$(systemctl is-active xray 2>/dev/null || true)
+    if [[ -z "$service_status" ]]; then
+        service_status="unknown"
+    fi
+
+    local generated_at
+    generated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+    cat > "$STRUCTURED_JSON_FILE" << EOF
+{
+  "schemaVersion": "vrs.vless-reality.v1",
+  "generatedAt": "$(json_escape "$generated_at")",
+  "protocol": "vless-reality",
+  "core": "xray-core",
+  "server": "$(json_escape "$SERVER_IP")",
+  "port": ${PORT},
+  "uuid": "$(json_escape "$UUID")",
+  "flow": "xtls-rprx-vision",
+  "transport": "tcp",
+  "security": "reality",
+  "sni": "$(json_escape "$DEST")",
+  "dest": "$(json_escape "$DEST")",
+  "destPort": ${DEST_PORT},
+  "publicKey": "$(json_escape "$PUBLIC_KEY")",
+  "shortId": "$(json_escape "$SHORT_ID")",
+  "fingerprint": "chrome",
+  "shareLink": "$(json_escape "$VLESS_LINK")",
+  "paths": {
+    "xrayConfig": "$(json_escape "$XRAY_CONFIG_FILE")",
+    "clientConfig": "$(json_escape "$CLIENT_CONFIG_FILE")",
+    "shareLink": "$(json_escape "$VLESS_LINK_FILE")",
+    "qrCode": "$(json_escape "$QR_CODE_FILE")",
+    "json": "$(json_escape "$STRUCTURED_JSON_FILE")",
+    "yaml": "$(json_escape "$STRUCTURED_YAML_FILE")"
+  },
+  "service": {
+    "name": "xray",
+    "status": "$(json_escape "$service_status")",
+    "statusCommand": "systemctl status xray",
+    "restartCommand": "systemctl restart xray",
+    "logCommand": "journalctl -u xray -f"
+  },
+  "healthCheck": {
+    "command": "/usr/local/bin/xray-health-check.sh",
+    "cron": "0 * * * * /usr/local/bin/xray-health-check.sh >> /var/log/xray/health-check.log 2>&1"
+  }
+}
+EOF
+    chmod 600 "$STRUCTURED_JSON_FILE"
+
+    cat > "$STRUCTURED_YAML_FILE" << EOF
+schemaVersion: "vrs.vless-reality.v1"
+generatedAt: "$(json_escape "$generated_at")"
+protocol: "vless-reality"
+core: "xray-core"
+server: "$(json_escape "$SERVER_IP")"
+port: ${PORT}
+uuid: "$(json_escape "$UUID")"
+flow: "xtls-rprx-vision"
+transport: "tcp"
+security: "reality"
+sni: "$(json_escape "$DEST")"
+dest: "$(json_escape "$DEST")"
+destPort: ${DEST_PORT}
+publicKey: "$(json_escape "$PUBLIC_KEY")"
+shortId: "$(json_escape "$SHORT_ID")"
+fingerprint: "chrome"
+shareLink: "$(json_escape "$VLESS_LINK")"
+paths:
+  xrayConfig: "$(json_escape "$XRAY_CONFIG_FILE")"
+  clientConfig: "$(json_escape "$CLIENT_CONFIG_FILE")"
+  shareLink: "$(json_escape "$VLESS_LINK_FILE")"
+  qrCode: "$(json_escape "$QR_CODE_FILE")"
+  json: "$(json_escape "$STRUCTURED_JSON_FILE")"
+  yaml: "$(json_escape "$STRUCTURED_YAML_FILE")"
+service:
+  name: "xray"
+  status: "$(json_escape "$service_status")"
+  statusCommand: "systemctl status xray"
+  restartCommand: "systemctl restart xray"
+  logCommand: "journalctl -u xray -f"
+healthCheck:
+  command: "/usr/local/bin/xray-health-check.sh"
+  cron: "0 * * * * /usr/local/bin/xray-health-check.sh >> /var/log/xray/health-check.log 2>&1"
+EOF
+    chmod 600 "$STRUCTURED_YAML_FILE"
+
+    log_success "AI JSON 输出已保存到 ${STRUCTURED_JSON_FILE}"
+    log_success "AI YAML 输出已保存到 ${STRUCTURED_YAML_FILE}"
 }
 
 print_client_config() {
     echo ""
-    cat "$CLIENT_CONFIG_FILE"
+    case "$OUTPUT_FORMAT" in
+        json)
+            cat "$STRUCTURED_JSON_FILE"
+            ;;
+        yaml)
+            cat "$STRUCTURED_YAML_FILE"
+            ;;
+        *)
+            cat "$CLIENT_CONFIG_FILE"
+            ;;
+    esac
     echo ""
 }
 
@@ -583,6 +914,7 @@ main() {
     check_system
     check_network
     check_port
+    check_xray_config_conflict
     
     echo ""
     
@@ -609,6 +941,7 @@ main() {
     
     # 生成客户端配置
     generate_client_config
+    write_structured_outputs
     
     echo ""
     echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}"
@@ -619,4 +952,6 @@ main() {
 }
 
 # 执行主函数
-main "$@"
+parse_args "$@"
+validate_args
+main

@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/punkcanyang/PunkcanTools/VRS/docs/ai-contract/vless-reality.schema.json",
+  "title": "VRS VLESS Reality AI Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "generatedAt",
+    "protocol",
+    "core",
+    "server",
+    "port",
+    "uuid",
+    "flow",
+    "transport",
+    "security",
+    "sni",
+    "dest",
+    "destPort",
+    "publicKey",
+    "shortId",
+    "fingerprint",
+    "shareLink",
+    "paths",
+    "service",
+    "healthCheck"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "vrs.vless-reality.v1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "protocol": {
+      "const": "vless-reality"
+    },
+    "core": {
+      "const": "xray-core"
+    },
+    "server": {
+      "type": "string",
+      "minLength": 1
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "flow": {
+      "const": "xtls-rprx-vision"
+    },
+    "transport": {
+      "const": "tcp"
+    },
+    "security": {
+      "const": "reality"
+    },
+    "sni": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dest": {
+      "type": "string",
+      "minLength": 1
+    },
+    "destPort": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "publicKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "shortId": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{2,16}$"
+    },
+    "fingerprint": {
+      "const": "chrome"
+    },
+    "shareLink": {
+      "type": "string",
+      "pattern": "^vless://"
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "xrayConfig",
+        "clientConfig",
+        "shareLink",
+        "qrCode",
+        "json",
+        "yaml"
+      ],
+      "properties": {
+        "xrayConfig": {
+          "type": "string",
+          "const": "/usr/local/etc/xray/config.json"
+        },
+        "clientConfig": {
+          "type": "string",
+          "const": "/usr/local/etc/xray/client-config.txt"
+        },
+        "shareLink": {
+          "type": "string",
+          "const": "/usr/local/etc/xray/vless-link.txt"
+        },
+        "qrCode": {
+          "type": "string",
+          "const": "/usr/local/etc/xray/vless-qrcode.png"
+        },
+        "json": {
+          "type": "string",
+          "const": "/usr/local/etc/xray/vless-reality.json"
+        },
+        "yaml": {
+          "type": "string",
+          "const": "/usr/local/etc/xray/vless-reality.yaml"
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "status",
+        "statusCommand",
+        "restartCommand",
+        "logCommand"
+      ],
+      "properties": {
+        "name": {
+          "const": "xray"
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "statusCommand": {
+          "const": "systemctl status xray"
+        },
+        "restartCommand": {
+          "const": "systemctl restart xray"
+        },
+        "logCommand": {
+          "const": "journalctl -u xray -f"
+        }
+      }
+    },
+    "healthCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "cron"
+      ],
+      "properties": {
+        "command": {
+          "const": "/usr/local/bin/xray-health-check.sh"
+        },
+        "cron": {
+          "const": "0 * * * * /usr/local/bin/xray-health-check.sh >> /var/log/xray/health-check.log 2>&1"
+        }
+      }
+    }
+  }
+}

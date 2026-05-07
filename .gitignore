@@ -1,3 +1,76 @@
-/.DS_Store
+# OS and editor files
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.sw?
+
+# Local agent/runtime files
 /.agent
-/word2md/node_modules
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.csr
+*.ovpn
+*.mobileconfig
+*client-config*.txt
+*share-link*.txt
+
+# Build output
+dist/
+**/dist/
+dist-ssr/
+**/dist-ssr/
+build/
+**/build/
+out/
+**/out/
+release/
+**/release/
+
+# Desktop app packages and generated binaries
+*.app/
+*.dmg
+*.exe
+*.zip
+*.blockmap
+*.asar
+*.dll
+*.dylib
+*.so
+
+# Rust/Tauri generated output
+target/
+**/target/
+src-tauri/target/
+**/src-tauri/target/
+src-tauri/gen/schemas/
+**/src-tauri/gen/schemas/
+
+# Local conversion outputs
+doc-tools/legacy-projects/html-book-pdf/output/
+doc-tools/legacy-projects/html-book-pdf/dist/
+doc-tools/legacy-projects/html-book-pdf/*.pdf
+doc-tools/legacy-projects/html-book-pdf/*.html

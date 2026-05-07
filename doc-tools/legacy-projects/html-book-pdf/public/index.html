@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML Book PDF</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="heading">
+      <p class="eyebrow">Desktop Publisher</p>
+      <h1>Drop HTML Here</h1>
+      <p class="subtext">拖入排版完成的 HTML，直接輸出帶頁碼的 PDF。</p>
+    </header>
+
+    <label id="dropzone" class="dropzone">
+      <input id="file-input" type="file" accept=".html,.htm,text/html" hidden>
+      <span id="file-name">拖曳單一 HTML 檔案到此處，或點擊選檔</span>
+    </label>
+
+    <button id="convert-button" type="button" disabled>匯出 PDF</button>
+    <p id="status" class="status" role="status">尚未選擇檔案</p>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
