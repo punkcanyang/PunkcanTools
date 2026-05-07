@@ -23,6 +23,7 @@ One-click deployment of VLESS + Reality proxy server on Debian/Ubuntu or CentOS/
 
 - Root access
 - Network connection
+- Installers install protocol dependencies automatically. IKEv2, IPsec, WireGuard, and OpenVPN explicitly install commonly missing minimal-image tools such as `curl`, `openssl`, `iproute2`/`iproute`, `iptables`, and `procps`/`procps-ng`.
 
 ## Quick Start
 
@@ -238,6 +239,20 @@ bash client/test-vrs-client.sh
 ```
 
 `client/test-vrs-client.sh` is an offline regression test. It does not require a real Xray-core binary or a live remote node. It uses a temporary state directory under `/private/tmp` and verifies local CLI import, index state, generated Xray config, failure-path status writes, `auto-use`, and `watch --once`.
+
+## Firewall And SSH Safety
+
+Before changing UFW, firewalld, or iptables rules, installer scripts try to detect and preserve SSH TCP access. Detection uses the current `SSH_CONNECTION`, `sshd -T`, `/etc/ssh/sshd_config`, plus default `22/tcp`.
+
+This is applied to VLESS + Reality and the protocol directories `vless-ws/`, `hysteria2/`, `tuic-v5/`, `trojan/`, `trojan-go/`, `shadowsocks/`, `shadowsocks-2022/`, `wireguard/`, `openvpn/`, `ikev2/`, and `ipsec/` on Debian/Ubuntu and CentOS/RHEL installers.
+
+## Sensitive Output Permissions
+
+Generated client configs, share links, server configs, VPN client files, private keys, PSKs, and password-bearing outputs are tightened to `chmod 600` where applicable. Directories storing VPN client files are tightened to `chmod 700`. Treat these files as live connection credentials and redact them from logs, issues, pull requests, and chat reports.
+
+## Share Link Encoding
+
+Hysteria2, TUIC v5, Trojan, and Trojan-Go share links use the repository's Bash URI encoder for passwords and WebSocket paths. This prevents `/`, `+`, `=`, spaces, and similar characters from breaking `://userinfo@host` or query parameters, without requiring `python3`.
 
 ## Common Commands
 

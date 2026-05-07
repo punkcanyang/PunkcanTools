@@ -41,6 +41,7 @@ SHARE_LINK_FILE="${XRAY_CONFIG_DIR}/vless-ws-link.txt"
 VRS_PROTOCOL_ID="vless-ws"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
 
 # 默认配置
 PORT=443
@@ -206,6 +207,7 @@ generate_config() {
 }
 EOF
 
+    chmod 600 "$XRAY_CONFIG_FILE"
     mkdir -p /var/log/xray
     log_success "配置文件生成完成"
 }
@@ -231,12 +233,15 @@ configure_service() {
 configure_firewall() {
     log_info "配置防火墙..."
     if command -v ufw &> /dev/null; then
+        ensure_ssh_ufw_rules
         ufw allow ${PORT}/tcp > /dev/null 2>&1 || true
         ufw --force enable > /dev/null 2>&1 || true
-        log_success "UFW 已开放端口 ${PORT}"
+        log_success "UFW 已开放端口 ${PORT}，SSH 端口已保留"
     elif command -v iptables &> /dev/null; then
-        iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT
-        log_success "iptables 已开放端口 ${PORT}"
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p tcp --dport ${PORT} -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT
+        log_success "iptables 已开放端口 ${PORT}，SSH 端口已保留"
     else
         log_warn "未检测到防火墙"
     fi
@@ -275,6 +280,7 @@ generate_client_config() {
     local share_link="vless://${UUID}@${server_ip}:${PORT}?encryption=none&security=tls&type=ws&host=${server_ip}&path=${WS_PATH}&allowInsecure=1#VLESS-WS-TLS"
 
     echo -n "$share_link" > "$SHARE_LINK_FILE"
+    chmod 600 "$SHARE_LINK_FILE"
 
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
@@ -307,6 +313,7 @@ ${share_link}
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
 
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "客户端配置已保存到 ${CLIENT_CONFIG_FILE}"
 
     # 显示终端二维码

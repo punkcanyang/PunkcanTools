@@ -42,6 +42,9 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -71,7 +74,7 @@ check_system() {
 install_openvpn() {
     log_info "安装 OpenVPN 和 Easy-RSA..."
     apt-get update > /dev/null 2>&1
-    apt-get install -y openvpn easy-rsa iptables > /dev/null 2>&1
+    apt-get install -y openvpn easy-rsa iptables curl iproute2 procps > /dev/null 2>&1
 
     if ! command -v openvpn &> /dev/null; then
         log_error "OpenVPN 安装失败"
@@ -119,6 +122,7 @@ EOF
 
     # 生成 TLS 认证密钥
     openvpn --genkey secret "${OPENVPN_DIR}/tls-auth.key"
+    chmod 600 "${OPENVPN_DIR}/tls-auth.key"
     log_success "TLS 认证密钥生成完成"
 
     cd - > /dev/null
@@ -190,10 +194,12 @@ enable_ip_forward() {
     iptables -t nat -A POSTROUTING -s ${VPN_SUBNET}/24 -o ${main_interface} -j MASQUERADE
     iptables -A FORWARD -i tun0 -j ACCEPT
     iptables -A FORWARD -o tun0 -j ACCEPT
+    ensure_ssh_iptables_rules
 
     # 持久化 iptables 规则
     if command -v iptables-save &> /dev/null; then
         iptables-save > /etc/iptables.rules
+        mkdir -p /etc/network/if-pre-up.d
         cat > /etc/network/if-pre-up.d/iptables << 'IPTEOF'
 #!/bin/sh
 iptables-restore < /etc/iptables.rules
@@ -224,8 +230,9 @@ start_openvpn() {
 
 configure_firewall() {
     if command -v ufw &> /dev/null; then
+        ensure_ssh_ufw_rules
         ufw allow ${PORT}/${PROTOCOL} > /dev/null 2>&1 || true
-        log_success "UFW 已开放 ${PORT}/${PROTOCOL}"
+        log_success "UFW 已开放 ${PORT}/${PROTOCOL}，SSH 端口已保留"
     fi
 }
 
@@ -235,6 +242,7 @@ configure_firewall() {
 generate_client_config() {
     log_info "生成客户端配置..."
     mkdir -p "$CLIENT_DIR"
+    chmod 700 "$CLIENT_DIR"
 
     local server_ip
     server_ip=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "YOUR_SERVER_IP")
@@ -273,6 +281,7 @@ $(cat "${EASYRSA_DIR}/pki/private/client1.key")
 $(cat "${OPENVPN_DIR}/tls-auth.key")
 </tls-auth>
 EOF
+    chmod 600 "$ovpn_file"
 
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
@@ -302,6 +311,7 @@ EOF
 
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
+    chmod 600 "$CLIENT_CONFIG_FILE"
 
     log_success ".ovpn 客户端配置已保存到 ${ovpn_file}"
 }

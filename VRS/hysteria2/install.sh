@@ -42,6 +42,10 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+source "${SCRIPT_DIR}/../lib/uri-encode.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -161,6 +165,7 @@ masquerade:
     rewriteHost: true
 EOF
 
+    chmod 600 "$HYSTERIA_CONFIG"
     log_success "配置文件生成完成"
 }
 
@@ -203,12 +208,15 @@ EOF
 configure_firewall() {
     log_info "配置防火墙..."
     if command -v ufw &> /dev/null; then
+        ensure_ssh_ufw_rules
         ufw allow ${PORT}/udp > /dev/null 2>&1 || true
         ufw --force enable > /dev/null 2>&1 || true
-        log_success "UFW 已开放端口 ${PORT}/udp"
+        log_success "UFW 已开放端口 ${PORT}/udp，SSH 端口已保留"
     elif command -v iptables &> /dev/null; then
-        iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
-        log_success "iptables 已开放端口 ${PORT}/udp"
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p udp --dport ${PORT} -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
+        log_success "iptables 已开放端口 ${PORT}/udp，SSH 端口已保留"
     fi
 }
 
@@ -239,13 +247,13 @@ generate_client_config() {
     server_ip=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "YOUR_SERVER_IP")
 
     # Hysteria 2 分享链接
-    # 使用 URL 编码密码
     local encoded_password
-    encoded_password=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${PASSWORD}'))" 2>/dev/null || echo "${PASSWORD}")
+    encoded_password=$(uri_encode_component "$PASSWORD")
 
     local share_link="hysteria2://${encoded_password}@${server_ip}:${PORT}?insecure=1&sni=bing.com#Hysteria2"
 
     echo -n "$share_link" > "$SHARE_LINK_FILE"
+    chmod 600 "$SHARE_LINK_FILE"
 
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
@@ -289,6 +297,7 @@ ${share_link}
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
 
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "客户端配置已保存到 ${CLIENT_CONFIG_FILE}"
 
     if command -v qrencode &> /dev/null; then

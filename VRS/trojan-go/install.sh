@@ -38,6 +38,10 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+source "${SCRIPT_DIR}/../lib/uri-encode.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -162,6 +166,7 @@ generate_config() {
 }
 EOF
 
+    chmod 600 "$TROJAN_GO_CONFIG"
     log_success "配置完成"
 }
 
@@ -200,11 +205,14 @@ EOF
 
 configure_firewall() {
     if command -v ufw &> /dev/null; then
+        ensure_ssh_ufw_rules
         ufw allow ${PORT}/tcp > /dev/null 2>&1 || true
     elif command -v iptables &> /dev/null; then
-        iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p tcp --dport ${PORT} -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT
     fi
-    log_success "防火墙已配置"
+    log_success "防火墙已配置，SSH 端口已保留"
 }
 
 enable_bbr() {
@@ -225,12 +233,15 @@ generate_client_config() {
     server_ip=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "YOUR_SERVER_IP")
 
     local encoded_password
-    encoded_password=$(python3 -c "import urllib.parse; print(urllib.parse.quote('${PASSWORD}'))" 2>/dev/null || echo "${PASSWORD}")
+    local encoded_ws_path
+    encoded_password=$(uri_encode_component "$PASSWORD")
+    encoded_ws_path=$(uri_encode_component "$WS_PATH")
 
     # Trojan-Go 分享链接 (兼容通用 Trojan 格式)
-    local share_link="trojan://${encoded_password}@${server_ip}:${PORT}?security=tls&type=ws&host=www.microsoft.com&path=${WS_PATH}&sni=www.microsoft.com&allowInsecure=1#Trojan-Go"
+    local share_link="trojan://${encoded_password}@${server_ip}:${PORT}?security=tls&type=ws&host=www.microsoft.com&path=${encoded_ws_path}&sni=www.microsoft.com&allowInsecure=1#Trojan-Go"
 
     echo -n "$share_link" > "$SHARE_LINK_FILE"
+    chmod 600 "$SHARE_LINK_FILE"
 
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
@@ -291,6 +302,7 @@ ${share_link}
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
 
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "配置已保存"
 
     if command -v qrencode &> /dev/null; then

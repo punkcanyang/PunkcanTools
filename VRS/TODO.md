@@ -81,6 +81,8 @@
 - [x] 本地 CLI Client 支援 `auto-use` 自动选线
 - [x] 本地 CLI Client 支援 `watch` / `watch-service` 健康检查与自动重连
 - [x] 本地 CLI Client 离线 regression test：`client/test-vrs-client.sh`
+- [x] IKEv2/IPsec/WireGuard/OpenVPN 补齐极简系统缺少的实际命令依赖
+- [x] Hysteria2/TUIC/Trojan/Trojan-Go 分享链接使用内建 URI encoding，不再依赖 `python3`
 - [ ] 统一入口菜单脚本（交互式选择协议安装）
 - [ ] 各协议增加 `health-check.sh`（参考根目录版本）
 - [ ] 支持自定义端口（安装时通过参数或交互输入）
@@ -96,8 +98,8 @@
 - [x] VLESS + Reality 客户端设定档、分享链接、二维码等敏感输出使用 `chmod 600`
 - [x] 将覆盖保护推广到 VLESS WS、Trojan、Shadowsocks、SS-2022 的 Debian/Ubuntu 与 CentOS/RHEL 安装脚本
 - [x] 将卸载保护推广到 VLESS Reality、VLESS WS、Trojan、Shadowsocks、SS-2022 的 Debian/Ubuntu 与 CentOS/RHEL 卸载脚本
-- [ ] 将 SSH 防锁规则推广到其他会启用防火墙的协议脚本
-- [ ] 将敏感输出权限规则推广到其他协议脚本
+- [x] 将 SSH 防锁规则推广到会修改防火墙的协议安装脚本
+- [x] 将敏感输出权限规则推广到其他协议脚本
 - [ ] 自签证书协议提供域名 + ACME 选项
 - [ ] 自动 fail2ban 集成
 - [ ] SSH 端口保护提醒

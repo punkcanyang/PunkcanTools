@@ -23,6 +23,10 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+source "${SCRIPT_DIR}/../lib/uri-encode.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -99,6 +103,7 @@ generate_config() {
     "log_level": "warn"
 }
 EOF
+    chmod 600 "$TUIC_CONFIG"
     log_success "配置完成"
 }
 
@@ -123,11 +128,15 @@ EOF
 
 configure_firewall() {
     if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+        ensure_ssh_firewalld_rules
         firewall-cmd --permanent --add-port=${PORT}/udp > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
-        log_success "firewalld 已开放 ${PORT}/udp"
+        log_success "firewalld 已开放 ${PORT}/udp，SSH 端口已保留"
     elif command -v iptables &> /dev/null; then
-        iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p udp --dport ${PORT} -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
+        log_success "iptables 已开放 ${PORT}/udp，SSH 端口已保留"
     fi
 }
 
@@ -135,8 +144,11 @@ generate_client_config() {
     log_info "生成客户端配置..."
     local server_ip
     server_ip=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "YOUR_SERVER_IP")
-    local share_link="tuic://${UUID}:${PASSWORD}@${server_ip}:${PORT}?congestion_control=bbr&alpn=h3,spdy/3.1&udp_relay_mode=native&allow_insecure=1#TUIC-v5"
+    local encoded_password
+    encoded_password=$(uri_encode_component "$PASSWORD")
+    local share_link="tuic://${UUID}:${encoded_password}@${server_ip}:${PORT}?congestion_control=bbr&alpn=h3,spdy/3.1&udp_relay_mode=native&allow_insecure=1#TUIC-v5"
     echo -n "$share_link" > "$SHARE_LINK_FILE"
+    chmod 600 "$SHARE_LINK_FILE"
 
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
@@ -151,6 +163,7 @@ generate_client_config() {
 卸载: bash $(dirname "$0")/uninstall-centos.sh
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "配置已保存"
     command -v qrencode &> /dev/null && { echo ""; qrencode -t ANSIUTF8 "$share_link"; }
 }

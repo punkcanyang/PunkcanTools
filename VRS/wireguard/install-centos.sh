@@ -26,6 +26,9 @@ PKG_MANAGER=""
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }; log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }; log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -47,9 +50,9 @@ install_wireguard() {
 
     # CentOS 8+ 内核已支持 WireGuard，只需安装工具
     # CentOS 7 需要 elrepo 内核
-    $PKG_MANAGER install -y wireguard-tools qrencode > /dev/null 2>&1 || {
+    $PKG_MANAGER install -y wireguard-tools qrencode curl iproute iptables procps-ng > /dev/null 2>&1 || {
         # 尝试安装 kmod-wireguard (CentOS 8)
-        $PKG_MANAGER install -y kmod-wireguard wireguard-tools qrencode > /dev/null 2>&1 || {
+        $PKG_MANAGER install -y kmod-wireguard wireguard-tools qrencode curl iproute iptables procps-ng > /dev/null 2>&1 || {
             log_error "WireGuard 安装失败，可能需要升级内核"
             exit 1
         }
@@ -72,6 +75,7 @@ enable_ip_forward() {
 generate_config() {
     log_info "生成密钥和配置..."
     mkdir -p "$WG_DIR" "$CLIENT_DIR"; chmod 700 "$WG_DIR"
+    chmod 700 "$CLIENT_DIR"
 
     local server_private_key server_public_key client_private_key client_public_key client_preshared_key
     server_private_key=$(wg genkey); server_public_key=$(echo "$server_private_key" | wg pubkey)
@@ -114,6 +118,7 @@ Endpoint = ${server_ip}:${PORT}
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 EOF
+    chmod 600 "$client_conf"
 
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
@@ -128,6 +133,7 @@ EOF
 卸载: bash $(dirname "$0")/uninstall-centos.sh
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "配置完成"
 }
 
@@ -138,10 +144,11 @@ start_wireguard() {
 
 configure_firewall() {
     if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+        ensure_ssh_firewalld_rules
         firewall-cmd --permanent --add-port=${PORT}/udp > /dev/null 2>&1
         firewall-cmd --permanent --add-masquerade > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
-        log_success "firewalld 已开放 ${PORT}/udp"
+        log_success "firewalld 已开放 ${PORT}/udp，SSH 端口已保留"
     fi
 }
 

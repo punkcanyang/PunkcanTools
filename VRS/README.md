@@ -30,6 +30,7 @@
 
 - Root 权限
 - 网络连接
+- 安装脚本会自动安装协议所需组件；IKEv2、IPsec、WireGuard、OpenVPN 会明确补齐 `curl`、`openssl`、`iproute2`/`iproute`、`iptables`、`procps`/`procps-ng` 等极简系统常缺命令
 
 ## 🚀 快速开始
 
@@ -249,6 +250,20 @@ bash client/test-vrs-client.sh
 
 `client/test-vrs-client.sh` 是离线 regression test，不需要真实 Xray-core 或真实远端节点。它会使用 `/private/tmp` 的临时状态目录，验证本地 CLI 的匯入、index、Xray config 生成、失败路径状态回写、`auto-use` 与 `watch --once`。
 
+## 防火墙与 SSH 保护
+
+安装脚本在修改 UFW、firewalld 或 iptables 前，会尝试检测当前 SSH 端口并先放行 SSH TCP 规则。检测来源包含当前 `SSH_CONNECTION`、`sshd -T`、`/etc/ssh/sshd_config`，并保留默认 `22/tcp`。
+
+已套用到根目录 VLESS + Reality，以及 `vless-ws/`、`hysteria2/`、`tuic-v5/`、`trojan/`、`trojan-go/`、`shadowsocks/`、`shadowsocks-2022/`、`wireguard/`、`openvpn/`、`ikev2/`、`ipsec/` 的 Debian/Ubuntu 与 CentOS/RHEL 安装脚本。
+
+## 敏感输出权限
+
+安装脚本生成的客户端配置、分享链接、服务端配置、VPN client 文件、私钥、PSK 与密码类输出会尽量设为 `chmod 600`；存放 VPN client 文件的目录会设为 `chmod 700`。这些文件包含可连线凭证，不应直接贴到日志、issue、PR 或聊天内容。
+
+## 分享链接编码
+
+Hysteria2、TUIC v5、Trojan 与 Trojan-Go 的分享链接会使用项目内建的 Bash URI encoder 处理密码与 WebSocket path，避免 `/`、`+`、`=`、空白等字符破坏 `://userinfo@host` 或 query 参数格式；这个流程不依赖 `python3`。
+
 ---
 
 ## 各协议安装说明
@@ -412,6 +427,8 @@ sudo bash <协议目录>/uninstall.sh --force
 ## 🔒 安全说明
 
 - VLESS+Reality 使用 x25519 加密，无需证书
+- 安装脚本会在修改防火墙前保留 SSH 端口，降低远端 VPS 安装后失联风险
+- 客户端配置、分享链接、私钥与密码类输出会尽量设为 `chmod 600`
 - 需要 TLS 的协议默认使用自签证书，客户端需允许不安全连接
 - WireGuard/OpenVPN/IKEv2/IPsec 是完整 VPN 方案，全流量转发
 - 建议定期更新各组件到最新版本

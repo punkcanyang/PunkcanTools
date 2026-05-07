@@ -12,6 +12,7 @@ SHARE_LINK_FILE="${XRAY_CONFIG_DIR}/ss-link.txt"
 VRS_PROTOCOL_ID="shadowsocks"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
 PORT=8388; METHOD="chacha20-ietf-poly1305"; PASSWORD=""; PKG_MANAGER=""
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }; log_error() { echo -e "${RED}[ERROR]${NC} $1"; }; log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
@@ -58,6 +59,7 @@ generate_config() {
     "outbounds": [{"protocol": "freedom", "tag": "direct"}, {"protocol": "blackhole", "tag": "block"}]
 }
 EOF
+    chmod 600 "$XRAY_CONFIG_FILE"
     log_success "配置完成"
 }
 
@@ -68,12 +70,17 @@ configure_service() {
 
 configure_firewall() {
     if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+        ensure_ssh_firewalld_rules
         firewall-cmd --permanent --add-port=${PORT}/tcp --add-port=${PORT}/udp > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
-        log_success "firewalld 已开放 ${PORT}"
+        log_success "firewalld 已开放 ${PORT}，SSH 端口已保留"
     elif command -v iptables &> /dev/null; then
-        iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT
-        iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p tcp --dport ${PORT} -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT
+        iptables -C INPUT -p udp --dport ${PORT} -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
+        log_success "iptables 已开放 ${PORT}，SSH 端口已保留"
     fi
 }
 
@@ -92,6 +99,7 @@ generate_client_config() {
     local user_info; user_info=$(echo -n "${METHOD}:${PASSWORD}" | base64 -w 0 2>/dev/null || echo -n "${METHOD}:${PASSWORD}" | base64)
     local share_link="ss://${user_info}@${server_ip}:${PORT}#Shadowsocks"
     echo -n "$share_link" > "$SHARE_LINK_FILE"
+    chmod 600 "$SHARE_LINK_FILE"
 
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
@@ -102,6 +110,7 @@ generate_client_config() {
 卸载: bash $(dirname "$0")/uninstall-centos.sh
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "配置已保存"
     command -v qrencode &> /dev/null && { echo ""; qrencode -t ANSIUTF8 "$share_link"; }
 }

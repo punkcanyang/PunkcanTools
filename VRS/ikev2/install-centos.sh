@@ -22,6 +22,9 @@ PKG_MANAGER=""
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }; log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }; log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -39,8 +42,8 @@ check_system() {
 install_strongswan() {
     log_info "安装 StrongSwan..."
     $PKG_MANAGER install -y epel-release > /dev/null 2>&1 || true
-    $PKG_MANAGER install -y strongswan > /dev/null 2>&1
-    command -v ipsec &> /dev/null || $PKG_MANAGER install -y strongswan > /dev/null 2>&1
+    $PKG_MANAGER install -y strongswan curl openssl iproute iptables procps-ng > /dev/null 2>&1
+    command -v ipsec &> /dev/null || $PKG_MANAGER install -y strongswan curl openssl iproute iptables procps-ng > /dev/null 2>&1
     command -v ipsec &> /dev/null || { log_error "StrongSwan 安装失败"; exit 1; }
     log_success "StrongSwan 安装完成"
 }
@@ -50,6 +53,7 @@ generate_certificates() {
     local server_ip; server_ip=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "YOUR_SERVER_IP")
     SERVER_CN="$server_ip"
     mkdir -p "${IPSEC_DIR}/private" "${IPSEC_DIR}/cacerts" "${IPSEC_DIR}/certs" "$CLIENT_DIR"
+    chmod 700 "${IPSEC_DIR}/private" "$CLIENT_DIR"
 
     ipsec pki --gen --type ec --size 256 --outform pem > "${IPSEC_DIR}/private/ca-key.pem"
     ipsec pki --self --ca --lifetime 3650 --in "${IPSEC_DIR}/private/ca-key.pem" \
@@ -127,10 +131,11 @@ start_service() {
 
 configure_firewall() {
     if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+        ensure_ssh_firewalld_rules
         firewall-cmd --permanent --add-port=500/udp --add-port=4500/udp > /dev/null 2>&1
         firewall-cmd --permanent --add-masquerade > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
-        log_success "firewalld 已配置"
+        log_success "firewalld 已配置，SSH 端口已保留"
     fi
 }
 
@@ -152,6 +157,7 @@ macOS: 网络 → VPN → IKEv2
 卸载: bash $(dirname "$0")/uninstall-centos.sh
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "配置已保存"
 }
 

@@ -29,6 +29,7 @@ SHARE_LINK_FILE="${XRAY_CONFIG_DIR}/ss2022-link.txt"
 VRS_PROTOCOL_ID="shadowsocks-2022"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
 
 PORT=8388
 METHOD="2022-blake3-aes-128-gcm"
@@ -120,6 +121,7 @@ generate_config() {
 }
 EOF
 
+    chmod 600 "$XRAY_CONFIG_FILE"
     log_success "配置完成"
 }
 
@@ -138,13 +140,17 @@ configure_service() {
 
 configure_firewall() {
     if command -v ufw &> /dev/null; then
+        ensure_ssh_ufw_rules
         ufw allow ${PORT}/tcp > /dev/null 2>&1 || true
         ufw allow ${PORT}/udp > /dev/null 2>&1 || true
     elif command -v iptables &> /dev/null; then
-        iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT
-        iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p tcp --dport ${PORT} -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT
+        iptables -C INPUT -p udp --dport ${PORT} -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
     fi
-    log_success "防火墙已配置"
+    log_success "防火墙已配置，SSH 端口已保留"
 }
 
 enable_bbr() {
@@ -170,6 +176,7 @@ generate_client_config() {
     local share_link="ss://${user_info}@${server_ip}:${PORT}#SS-2022"
 
     echo -n "$share_link" > "$SHARE_LINK_FILE"
+    chmod 600 "$SHARE_LINK_FILE"
 
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
@@ -212,6 +219,7 @@ ${share_link}
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
 
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "配置已保存"
 
     if command -v qrencode &> /dev/null; then

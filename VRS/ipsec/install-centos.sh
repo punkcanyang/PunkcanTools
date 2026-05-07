@@ -18,6 +18,9 @@ PKG_MANAGER=""
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }; log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }; log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -35,7 +38,7 @@ check_system() {
 install_packages() {
     log_info "安装 StrongSwan 和 xl2tpd..."
     $PKG_MANAGER install -y epel-release > /dev/null 2>&1 || true
-    $PKG_MANAGER install -y strongswan xl2tpd ppp > /dev/null 2>&1
+    $PKG_MANAGER install -y strongswan xl2tpd ppp curl openssl iproute iptables procps-ng > /dev/null 2>&1
     log_success "安装完成"
 }
 
@@ -114,10 +117,14 @@ enable_ip_forward() {
     iptables -t nat -A POSTROUTING -s 10.55.55.0/24 -o ${main_interface} -j MASQUERADE
     iptables -A FORWARD -s 10.55.55.0/24 -j ACCEPT
     iptables -A FORWARD -d 10.55.55.0/24 -j ACCEPT
-    iptables -I INPUT -p udp --dport 500 -j ACCEPT
-    iptables -I INPUT -p udp --dport 4500 -j ACCEPT
-    iptables -I INPUT -p udp --dport 1701 -j ACCEPT
-    log_success "IP 转发和 NAT 已配置"
+    ensure_ssh_iptables_rules
+    iptables -C INPUT -p udp --dport 500 -j ACCEPT 2>/dev/null || \
+        iptables -I INPUT -p udp --dport 500 -j ACCEPT
+    iptables -C INPUT -p udp --dport 4500 -j ACCEPT 2>/dev/null || \
+        iptables -I INPUT -p udp --dport 4500 -j ACCEPT
+    iptables -C INPUT -p udp --dport 1701 -j ACCEPT 2>/dev/null || \
+        iptables -I INPUT -p udp --dport 1701 -j ACCEPT
+    log_success "IP 转发和 NAT 已配置，SSH 端口已保留"
 }
 
 start_services() {
@@ -131,10 +138,11 @@ start_services() {
 
 configure_firewall() {
     if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+        ensure_ssh_firewalld_rules
         firewall-cmd --permanent --add-port=500/udp --add-port=4500/udp --add-port=1701/udp > /dev/null 2>&1
         firewall-cmd --permanent --add-masquerade > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
-        log_success "firewalld 已配置"
+        log_success "firewalld 已配置，SSH 端口已保留"
     fi
 }
 
@@ -157,6 +165,7 @@ generate_client_config() {
 卸载: bash $(dirname "$0")/uninstall-centos.sh
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "配置已保存"
 }
 

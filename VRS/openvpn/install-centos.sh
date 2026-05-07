@@ -20,6 +20,9 @@ PKG_MANAGER=""
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }; log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }; log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -37,7 +40,7 @@ check_system() {
 install_openvpn() {
     log_info "安装 OpenVPN 和 Easy-RSA..."
     $PKG_MANAGER install -y epel-release > /dev/null 2>&1 || true
-    $PKG_MANAGER install -y openvpn easy-rsa iptables > /dev/null 2>&1
+    $PKG_MANAGER install -y openvpn easy-rsa iptables curl iproute procps-ng > /dev/null 2>&1
     command -v openvpn &> /dev/null || { log_error "安装失败"; exit 1; }
     log_success "OpenVPN 安装完成"
 }
@@ -62,6 +65,7 @@ EOF
     ./easyrsa --batch build-server-full server nopass > /dev/null 2>&1; log_success "服务器证书完成"
     ./easyrsa --batch build-client-full client1 nopass > /dev/null 2>&1; log_success "客户端证书完成"
     openvpn --genkey secret "${OPENVPN_DIR}/tls-auth.key"
+    chmod 600 "${OPENVPN_DIR}/tls-auth.key"
     cd - > /dev/null
 }
 
@@ -106,6 +110,7 @@ enable_ip_forward() {
 
     iptables -t nat -A POSTROUTING -s ${VPN_SUBNET}/24 -o ${main_interface} -j MASQUERADE
     iptables -A FORWARD -i tun0 -j ACCEPT; iptables -A FORWARD -o tun0 -j ACCEPT
+    ensure_ssh_iptables_rules
 
     # 持久化
     if command -v iptables-save &> /dev/null; then
@@ -121,15 +126,17 @@ start_openvpn() {
 
 configure_firewall() {
     if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+        ensure_ssh_firewalld_rules
         firewall-cmd --permanent --add-port=${PORT}/${PROTOCOL} > /dev/null 2>&1
         firewall-cmd --permanent --add-masquerade > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
-        log_success "firewalld 已配置"
+        log_success "firewalld 已配置，SSH 端口已保留"
     fi
 }
 
 generate_client_config() {
     mkdir -p "$CLIENT_DIR"
+    chmod 700 "$CLIENT_DIR"
     local server_ip; server_ip=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "YOUR_SERVER_IP")
     local ovpn_file="${CLIENT_DIR}/client1.ovpn"
 
@@ -161,6 +168,7 @@ $(cat "${EASYRSA_DIR}/pki/private/client1.key")
 $(cat "${OPENVPN_DIR}/tls-auth.key")
 </tls-auth>
 EOF
+    chmod 600 "$ovpn_file"
 
     cat > "$CLIENT_CONFIG_FILE" << EOF
 ═══════════════════════════════════════════════════════════════════════════════
@@ -175,6 +183,7 @@ EOF
 卸载: bash $(dirname "$0")/uninstall-centos.sh
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success ".ovpn 已保存到 ${ovpn_file}"
 }
 

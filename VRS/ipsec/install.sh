@@ -41,6 +41,9 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -70,7 +73,7 @@ check_system() {
 install_packages() {
     log_info "安装 StrongSwan 和 xl2tpd..."
     apt-get update > /dev/null 2>&1
-    apt-get install -y strongswan xl2tpd ppp > /dev/null 2>&1
+    apt-get install -y strongswan xl2tpd ppp curl openssl iproute2 iptables procps > /dev/null 2>&1
     log_success "安装完成"
 }
 
@@ -175,11 +178,15 @@ enable_ip_forward() {
     iptables -A FORWARD -d 10.55.55.0/24 -j ACCEPT
 
     # 允许 IPsec 端口
-    iptables -I INPUT -p udp --dport 500 -j ACCEPT
-    iptables -I INPUT -p udp --dport 4500 -j ACCEPT
-    iptables -I INPUT -p udp --dport 1701 -j ACCEPT
+    ensure_ssh_iptables_rules
+    iptables -C INPUT -p udp --dport 500 -j ACCEPT 2>/dev/null || \
+        iptables -I INPUT -p udp --dport 500 -j ACCEPT
+    iptables -C INPUT -p udp --dport 4500 -j ACCEPT 2>/dev/null || \
+        iptables -I INPUT -p udp --dport 4500 -j ACCEPT
+    iptables -C INPUT -p udp --dport 1701 -j ACCEPT 2>/dev/null || \
+        iptables -I INPUT -p udp --dport 1701 -j ACCEPT
 
-    log_success "IP 转发和 NAT 已配置"
+    log_success "IP 转发和 NAT 已配置，SSH 端口已保留"
 }
 
 #-------------------------------------------------------------------------------
@@ -296,6 +303,7 @@ VPN 类型: L2TP/IPsec PSK
 
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
+    chmod 600 "$CLIENT_CONFIG_FILE"
 
     log_success "配置已保存到 ${CLIENT_CONFIG_FILE}"
 }

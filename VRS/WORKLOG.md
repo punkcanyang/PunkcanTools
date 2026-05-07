@@ -1,5 +1,94 @@
 # WORKLOG - vless-reality-setup
 
+## 2026-05-07 P3.5 分享链接 URI encoding
+
+### 本次落地
+
+- 新增 `lib/uri-encode.sh`，提供纯 Bash `uri_encode_component`，不依赖 `python3`、`jq` 或其他外部工具。
+- Hysteria2 Debian/Ubuntu 与 CentOS/RHEL 分享链接改用内建 URI encoder 处理密码。
+- TUIC v5 Debian/Ubuntu 与 CentOS/RHEL 分享链接改用内建 URI encoder 处理密码，修掉 base64 密码含 `/`、`+`、`=` 时可能破坏 `tuic://` userinfo 的问题。
+- Trojan Debian/Ubuntu 与 CentOS/RHEL 分享链接改用内建 URI encoder 处理密码。
+- Trojan-Go Debian/Ubuntu 与 CentOS/RHEL 分享链接改用内建 URI encoder 处理密码与 WebSocket path。
+- README、README.en 与 TODO 已同步。
+
+### 验证
+
+- `bash -n lib/uri-encode.sh hysteria2/install.sh hysteria2/install-centos.sh tuic-v5/install.sh tuic-v5/install-centos.sh trojan/install.sh trojan/install-centos.sh trojan-go/install.sh trojan-go/install-centos.sh`
+- `bash -c 'source lib/uri-encode.sh; uri_encode_component "a/b+c=d@x y"'`，输出 `a%2Fb%2Bc%3Dd%40x%20y`。
+- `rg -n "python3|urllib|quote\\(|tuic://\\$\\{UUID\\}:\\$\\{PASSWORD\\}|path=\\$\\{WS_PATH\\}" hysteria2/install*.sh tuic-v5/install*.sh trojan/install*.sh trojan-go/install*.sh`，确认没有残留旧 encoding 路径。
+- `bash -n *.sh */*.sh`
+- `bash client/test-vrs-client.sh`
+- `git diff --check`
+- `shellcheck` 本机未安装，未执行。
+
+## 2026-05-07 P3.4 VPN 依赖补齐
+
+### 本次落地
+
+- IKEv2 Debian/Ubuntu 版补齐 `curl`、`openssl`、`iproute2`、`iptables`、`procps`。
+- IPsec/L2TP Debian/Ubuntu 版补齐 `curl`、`openssl`、`iproute2`、`iptables`、`procps`。
+- WireGuard Debian/Ubuntu 版补齐 `curl`、`iproute2`、`iptables`、`procps`。
+- OpenVPN Debian/Ubuntu 版补齐 `curl`、`iproute2`、`procps`，并在写入 `/etc/network/if-pre-up.d/iptables` 前建立目录。
+- IKEv2、IPsec/L2TP、WireGuard、OpenVPN 的 CentOS/RHEL 版补齐 `curl`、`openssl`、`iproute`、`iptables`、`procps-ng` 等实际使用命令所需套件。
+- README、README.en 与 TODO 已同步。
+
+### 验证
+
+- `bash -n ikev2/install.sh ikev2/install-centos.sh ipsec/install.sh ipsec/install-centos.sh wireguard/install.sh wireguard/install-centos.sh openvpn/install.sh openvpn/install-centos.sh`
+- `bash -n *.sh */*.sh`
+- `bash client/test-vrs-client.sh`
+- `git diff --check`
+- `shellcheck` 本机未安装，未执行。
+
+## 2026-05-07 P3.3 敏感输出权限推广
+
+### 本次落地
+
+- 将敏感输出 `chmod 600` 推广到其他协议安装脚本。
+- Xray-backed 协议会收紧 `/usr/local/etc/xray/config.json`、分享链接与 `client-config.txt`。
+- Hysteria2、TUIC v5、Trojan-Go 会收紧服务端 config、分享链接与 `client-config.txt`。
+- WireGuard 会收紧 `wg0.conf`、`clients/client1.conf`、`client-config.txt`，并将 client 目录设为 `700`。
+- OpenVPN 会收紧 `tls-auth.key`、`.ovpn`、`client-config.txt`，并将 client 目录设为 `700`。
+- IKEv2/IPsec 会收紧含密码、PSK 或 EAP 凭证的 client config；既有 private key / secrets 权限保持 `600`。
+- README、README.en 与 TODO 已同步。
+
+### 验证
+
+- `bash -n *.sh */*.sh`
+- `bash client/test-vrs-client.sh`
+- `git diff --check`
+- `shellcheck` 本机未安装，未执行。
+
+## 2026-05-07 P3.2 防火墙 SSH 防锁推广
+
+### 本次落地
+
+- 新增 `lib/firewall-ssh-guard.sh`，集中检测 SSH 端口并提供 UFW、firewalld、iptables 的 SSH 放行函数。
+- SSH 端口检测来源包含当前 `SSH_CONNECTION`、`sshd -T`、`/etc/ssh/sshd_config`，并保留默认 `22/tcp`。
+- 将 SSH 防锁规则推广到会修改防火墙的协议安装脚本：
+  - `vless-ws/`
+  - `hysteria2/`
+  - `tuic-v5/`
+  - `trojan/`
+  - `trojan-go/`
+  - `shadowsocks/`
+  - `shadowsocks-2022/`
+  - `wireguard/`
+  - `openvpn/`
+  - `ikev2/`
+  - `ipsec/`
+- OpenVPN 的 iptables 持久化流程会在 `iptables-save` 前先加入 SSH allow rule，避免规则保存后漏掉 SSH。
+- README、README.en 与 TODO 已同步。
+
+### 验证
+
+- `bash -n lib/firewall-ssh-guard.sh`
+- `bash -n *.sh */*.sh`
+- `bash client/test-vrs-client.sh`
+- `bash -c 'source lib/firewall-ssh-guard.sh; detect_ssh_ports'`，当前开发机输出 `22`。
+- `git diff --check`
+- `shellcheck` 本机未安装，未执行。
+
 ## 2026-05-07 P3.1 Xray-backed 协议覆盖与卸载保护
 
 ### 本次落地

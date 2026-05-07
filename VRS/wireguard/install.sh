@@ -41,6 +41,9 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -78,7 +81,7 @@ check_port() {
 install_wireguard() {
     log_info "安装 WireGuard..."
     apt-get update > /dev/null 2>&1
-    apt-get install -y wireguard wireguard-tools qrencode > /dev/null 2>&1
+    apt-get install -y wireguard wireguard-tools qrencode curl iproute2 iptables procps > /dev/null 2>&1
 
     # 验证安装
     if ! command -v wg &> /dev/null; then
@@ -111,6 +114,7 @@ generate_config() {
     log_info "生成密钥和配置..."
     mkdir -p "$WG_DIR" "$CLIENT_DIR"
     chmod 700 "$WG_DIR"
+    chmod 700 "$CLIENT_DIR"
 
     # 生成服务端密钥
     local server_private_key
@@ -175,6 +179,7 @@ Endpoint = ${server_ip}:${PORT}
 AllowedIPs = 0.0.0.0/0
 PersistentKeepalive = 25
 EOF
+    chmod 600 "$client_conf"
 
     # 保存客户端信息到总配置文件
     cat > "$CLIENT_CONFIG_FILE" << EOF
@@ -207,6 +212,7 @@ $(cat "$client_conf")
 
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
+    chmod 600 "$CLIENT_CONFIG_FILE"
 
     log_success "密钥和配置生成完成"
 }
@@ -231,11 +237,14 @@ start_wireguard() {
 
 configure_firewall() {
     if command -v ufw &> /dev/null; then
+        ensure_ssh_ufw_rules
         ufw allow ${PORT}/udp > /dev/null 2>&1 || true
-        log_success "UFW 已开放 ${PORT}/udp"
+        log_success "UFW 已开放 ${PORT}/udp，SSH 端口已保留"
     elif command -v iptables &> /dev/null; then
-        iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
-        log_success "iptables 已开放 ${PORT}/udp"
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p udp --dport ${PORT} -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p udp --dport ${PORT} -j ACCEPT
+        log_success "iptables 已开放 ${PORT}/udp，SSH 端口已保留"
     fi
 }
 

@@ -44,6 +44,9 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -73,7 +76,7 @@ check_system() {
 install_strongswan() {
     log_info "安装 StrongSwan..."
     apt-get update > /dev/null 2>&1
-    apt-get install -y strongswan strongswan-pki libcharon-extra-plugins > /dev/null 2>&1
+    apt-get install -y strongswan strongswan-pki libcharon-extra-plugins curl openssl iproute2 iptables procps > /dev/null 2>&1
 
     if ! command -v ipsec &> /dev/null; then
         log_error "StrongSwan 安装失败"
@@ -93,6 +96,7 @@ generate_certificates() {
     SERVER_CN="$server_ip"
 
     mkdir -p "${IPSEC_DIR}/private" "${IPSEC_DIR}/cacerts" "${IPSEC_DIR}/certs" "$CLIENT_DIR"
+    chmod 700 "${IPSEC_DIR}/private" "$CLIENT_DIR"
 
     # 生成 CA 私钥和证书
     ipsec pki --gen --type ec --size 256 --outform pem \
@@ -224,13 +228,17 @@ start_service() {
 
 configure_firewall() {
     if command -v ufw &> /dev/null; then
+        ensure_ssh_ufw_rules
         ufw allow 500/udp > /dev/null 2>&1 || true
         ufw allow 4500/udp > /dev/null 2>&1 || true
-        log_success "UFW 已开放 500/udp 和 4500/udp"
+        log_success "UFW 已开放 500/udp 和 4500/udp，SSH 端口已保留"
     elif command -v iptables &> /dev/null; then
-        iptables -I INPUT -p udp --dport 500 -j ACCEPT
-        iptables -I INPUT -p udp --dport 4500 -j ACCEPT
-        log_success "iptables 已开放端口"
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p udp --dport 500 -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p udp --dport 500 -j ACCEPT
+        iptables -C INPUT -p udp --dport 4500 -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p udp --dport 4500 -j ACCEPT
+        log_success "iptables 已开放端口，SSH 端口已保留"
     fi
 }
 
@@ -307,6 +315,7 @@ CA 证书: ${CLIENT_DIR}/ca-cert.pem
 ═══════════════════════════════════════════════════════════════════════════════
 EOF
 
+    chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "配置已保存到 ${CLIENT_CONFIG_FILE}"
 }
 
