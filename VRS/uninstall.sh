@@ -35,6 +35,12 @@ log_success() {
     echo -e "${GREEN}[✓]${NC} $1"
 }
 
+XRAY_CONFIG_DIR="/usr/local/etc/xray"
+XRAY_CONFIG_FILE="${XRAY_CONFIG_DIR}/config.json"
+VRS_PROTOCOL_ID="vless-reality"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/lib/xray-protocol-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -149,6 +155,7 @@ cleanup_bbr() {
 #-------------------------------------------------------------------------------
 main() {
     print_banner
+    parse_xray_uninstall_args "$@"
     
     check_root
     
@@ -162,6 +169,7 @@ main() {
     fi
     
     echo ""
+    check_xray_uninstall_ownership
     
     stop_service
     remove_cron

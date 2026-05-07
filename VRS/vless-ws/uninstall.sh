@@ -21,6 +21,12 @@ log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
 
+XRAY_CONFIG_DIR="/usr/local/etc/xray"
+XRAY_CONFIG_FILE="${XRAY_CONFIG_DIR}/config.json"
+VRS_PROTOCOL_ID="vless-ws"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
+
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -38,6 +44,7 @@ check_root() {
 
 main() {
     print_banner
+    parse_xray_uninstall_args "$@"
     check_root
 
     echo ""
@@ -45,6 +52,7 @@ main() {
     read -p "确认卸载？(y/N): " confirm
     [[ "$confirm" != "y" && "$confirm" != "Y" ]] && { log_info "卸载已取消"; exit 0; }
     echo ""
+    check_xray_uninstall_ownership
 
     # 停止服务
     log_info "停止 Xray 服务..."

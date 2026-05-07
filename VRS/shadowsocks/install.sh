@@ -27,6 +27,9 @@ XRAY_CONFIG_DIR="/usr/local/etc/xray"
 XRAY_CONFIG_FILE="${XRAY_CONFIG_DIR}/config.json"
 CLIENT_CONFIG_FILE="${XRAY_CONFIG_DIR}/client-config.txt"
 SHARE_LINK_FILE="${XRAY_CONFIG_DIR}/ss-link.txt"
+VRS_PROTOCOL_ID="shadowsocks"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
 
 PORT=8388
 METHOD="chacha20-ietf-poly1305"
@@ -206,14 +209,17 @@ EOF
 main() {
     print_banner
     echo ""
+    parse_xray_guard_args "$@"
     check_root
     check_system
+    check_xray_config_ownership
     check_port
     echo ""
     install_dependencies
     install_xray
     echo ""
     generate_config
+    write_xray_protocol_marker
     echo ""
     configure_service
     configure_firewall

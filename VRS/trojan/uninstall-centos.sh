@@ -4,7 +4,14 @@
 #===============================================================================
 set -e
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
+XRAY_CONFIG_DIR="/usr/local/etc/xray"
+XRAY_CONFIG_FILE="${XRAY_CONFIG_DIR}/config.json"
+VRS_PROTOCOL_ID="trojan"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
 
 main() {
     echo -e "${CYAN}"
@@ -12,10 +19,12 @@ main() {
     echo "║          Trojan (Xray) 卸载脚本 (CentOS/RHEL)                  ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
+    parse_xray_uninstall_args "$@"
     [[ $EUID -ne 0 ]] && { echo -e "${RED}需要 root 权限${NC}"; exit 1; }
     echo -e "${YELLOW}警告: 将完全卸载 Xray (Trojan)${NC}"
     read -p "确认？(y/N): " confirm
     [[ "$confirm" != "y" && "$confirm" != "Y" ]] && exit 0
+    check_xray_uninstall_ownership
 
     systemctl stop xray 2>/dev/null || true
     systemctl disable xray 2>/dev/null || true

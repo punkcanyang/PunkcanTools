@@ -13,6 +13,9 @@ XRAY_CONFIG_FILE="${XRAY_CONFIG_DIR}/config.json"
 CERT_DIR="${XRAY_CONFIG_DIR}/certs"
 CLIENT_CONFIG_FILE="${XRAY_CONFIG_DIR}/client-config.txt"
 SHARE_LINK_FILE="${XRAY_CONFIG_DIR}/trojan-link.txt"
+VRS_PROTOCOL_ID="trojan"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
 PORT=443
 PASSWORD=""
 PKG_MANAGER=""
@@ -146,9 +149,10 @@ EOF
 
 main() {
     print_banner; echo ""
-    check_root; check_system; check_port; echo ""
+    parse_xray_guard_args "$@"
+    check_root; check_system; check_xray_config_ownership; check_port; echo ""
     install_dependencies; install_xray; echo ""
-    generate_cert; generate_config; echo ""
+    generate_cert; generate_config; write_xray_protocol_marker; echo ""
     configure_service; configure_firewall; enable_bbr; echo ""
     generate_client_config
     echo -e "\n${GREEN}════════ 安装完成！════════${NC}\n"

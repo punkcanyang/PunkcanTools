@@ -72,6 +72,8 @@ sudo bash install.sh --replace
 sudo bash install-centos.sh --replace
 ```
 
+Xray-backed protocols currently share `/usr/local/etc/xray/config.json` and the same `xray` systemd service; they are not installed side by side yet. VLESS + Reality, VLESS WS, Trojan, Shadowsocks, and SS-2022 write `/usr/local/etc/xray/vrs-protocol` as an ownership marker. Installers stop on a different or missing marker unless `--replace` is passed. Uninstallers stop on a different or missing marker unless `--force` is passed.
+
 Automation-friendly examples:
 
 ```bash
@@ -109,6 +111,73 @@ Formal contract files:
 
 Mask real `uuid`, `publicKey`, `shortId`, `shareLink`, and real server addresses in logs, issues, pull requests, and chat reports.
 
+## Local Command Line Client
+
+P2 adds `client/vrs-client.sh`. It imports the remote `vless-reality.json` contract, generates a local Xray client config, and provides basic start, stop, restart, status, log, export, list, and connectivity-check commands. The first version supports VLESS + Reality only on macOS and Linux.
+
+Install Xray-core locally first and ensure `xray` is in `PATH`; or set `XRAY_BIN=/path/to/xray`.
+
+```bash
+# Install or check local Xray-core
+bash client/vrs-client.sh install-core
+bash client/vrs-client.sh check-core
+
+# Import the JSON contract fetched from the server; lower priority wins
+bash client/vrs-client.sh import ./vless-reality.json --name my-node --priority 10
+
+# Select a route; this writes current, starts the connection, and checks connectivity
+bash client/vrs-client.sh use --name my-node
+
+# Auto-select a route by priority, connectivity, latency, and failure count
+bash client/vrs-client.sh auto-use
+
+# Run one health-check pass; auto-select if current route is unavailable
+bash client/vrs-client.sh watch --once
+
+# Run foreground watcher; periodically checks current and reconnects/switches if needed
+bash client/vrs-client.sh watch --interval 60
+
+# Show current route, status, and local proxy ports
+bash client/vrs-client.sh current
+bash client/vrs-client.sh status
+bash client/vrs-client.sh list --sorted
+
+# Check connectivity through the local SOCKS proxy
+bash client/vrs-client.sh check
+
+# Stop local proxy
+bash client/vrs-client.sh stop
+
+# Install as a user-level background service
+bash client/vrs-client.sh service install --name my-node
+bash client/vrs-client.sh service status --name my-node
+bash client/vrs-client.sh service uninstall --name my-node
+
+# Install watcher as a user-level background service
+bash client/vrs-client.sh watch-service install --interval 60
+bash client/vrs-client.sh watch-service status
+bash client/vrs-client.sh watch-service uninstall
+```
+
+Default local ports:
+
+| Type | Address |
+|------|---------|
+| SOCKS | `127.0.0.1:10808` |
+| HTTP | `127.0.0.1:10809` |
+
+The default local state directory is `$HOME/.vrs/client`. Override it with `VRS_CLIENT_HOME=/path/to/client-state`. Named profiles are already supported; future failover work will add ordering by manual priority, connectivity, latency, and failure count.
+
+Multi-route metadata is stored in `$HOME/.vrs/client/profiles/index.json`. A successful `check` writes `lastStatus=online`, `latencyMs`, and resets `failureCount`; a failed check writes `lastStatus=offline` and increments `failureCount`.
+
+`auto-use` reads all `enabled=true` profiles, sorts them by `priority`, `lastStatus`, `latencyMs`, `failureCount`, and name, then tries each candidate. The first route that starts and passes connectivity check becomes current; if all candidates fail, the command exits non-zero.
+
+`install-core` uses Homebrew `brew install xray` on macOS. On Linux it also prefers Homebrew; if Homebrew is unavailable, it downloads and runs the official XTLS `Xray-install` script to install Xray-core.
+
+`service` uses `~/Library/LaunchAgents/io.punkcan.vrs.<name>.plist` on macOS and a `systemd --user` unit named `vrs-client-<name>.service` on Linux. Service mode runs Xray in the foreground and lets launchd/systemd handle restarts.
+
+`watch` periodically checks the current profile. If current is unavailable, it calls `auto-use` to reconnect or switch routes. `watch-service` uses `~/Library/LaunchAgents/io.punkcan.vrs.watch.plist` on macOS and a `systemd --user` unit named `vrs-client-watch.service` on Linux. Watcher logs are written to `$HOME/.vrs/client/logs/watcher.log`.
+
 ### Uninstall
 
 ```bash
@@ -117,6 +186,12 @@ sudo bash uninstall.sh
 
 # CentOS/RHEL
 sudo bash uninstall-centos.sh
+```
+
+For Xray-backed protocol directories, use the matching uninstall script. The script removes Xray only when `/usr/local/etc/xray/vrs-protocol` matches that protocol. Use `--force` only when intentional:
+
+```bash
+sudo bash <protocol-dir>/uninstall.sh --force
 ```
 
 ## Configuration
@@ -144,12 +219,25 @@ vless-reality-setup/
 ├── uninstall-centos.sh # CentOS/RHEL uninstall script
 ├── health-check.sh     # Health check script (universal)
 ├── show-config.sh      # Config viewer script (universal)
+├── client/
+│   └── vrs-client.sh   # Local Xray command line client
+├── docs/
+│   └── ai-contract/    # AI automation JSON/YAML contract
 └── README.md           # Documentation
 ```
 
 Installed commands:
 - `xray-show-config` - View config and QR code
 - `xray-uninstall.sh` - Uninstall script
+
+## Development Validation
+
+```bash
+bash -n *.sh */*.sh
+bash client/test-vrs-client.sh
+```
+
+`client/test-vrs-client.sh` is an offline regression test. It does not require a real Xray-core binary or a live remote node. It uses a temporary state directory under `/private/tmp` and verifies local CLI import, index state, generated Xray config, failure-path status writes, `auto-use`, and `watch --once`.
 
 ## Common Commands
 

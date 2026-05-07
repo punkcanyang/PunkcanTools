@@ -38,6 +38,9 @@ XRAY_CONFIG_FILE="${XRAY_CONFIG_DIR}/config.json"
 CERT_DIR="${XRAY_CONFIG_DIR}/certs"
 CLIENT_CONFIG_FILE="${XRAY_CONFIG_DIR}/client-config.txt"
 SHARE_LINK_FILE="${XRAY_CONFIG_DIR}/vless-ws-link.txt"
+VRS_PROTOCOL_ID="vless-ws"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
 
 # 默认配置
 PORT=443
@@ -319,12 +322,14 @@ EOF
 #-------------------------------------------------------------------------------
 main() {
     print_banner
+    parse_xray_guard_args "$@"
     echo ""
     log_info "开始安装 VLESS + WebSocket + TLS..."
     echo ""
 
     check_root
     check_system
+    check_xray_config_ownership
     check_port
     echo ""
 
@@ -334,6 +339,7 @@ main() {
 
     generate_self_signed_cert
     generate_config
+    write_xray_protocol_marker
     echo ""
 
     configure_service

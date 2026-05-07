@@ -104,6 +104,82 @@ ssh user@server 'cd /path/to/vless-reality-setup && sudo bash install.sh --yes -
 
 JSON/YAML 合约字段包含 `schemaVersion`、`protocol`、`core`、`server`、`port`、`uuid`、`flow`、`transport`、`security`、`sni`、`dest`、`destPort`、`publicKey`、`shortId`、`fingerprint`、`shareLink`、`paths`、`service`、`healthCheck`。回报日志、PR、issue 或聊天内容时必须遮罩真实 `uuid`、`publicKey`、`shortId`、`shareLink` 与真实服务器地址。
 
+### Xray 配置归属保护
+
+目前 Xray-backed 协议仍共用 `/usr/local/etc/xray/config.json` 与同一个 `xray` systemd service；这不是多协议同时共存模式。为避免后安装的协议无声覆盖前一个协议，安装脚本会写入 `/usr/local/etc/xray/vrs-protocol` 归属标记。
+
+适用协议：根目录 VLESS + Reality、`vless-ws/`、`trojan/`、`shadowsocks/`、`shadowsocks-2022/`。
+
+- 安装时若发现既有 Xray 配置属于其他协议，或没有归属标记，脚本会停止；确认要替换时才加 `--replace`。
+- 卸载时若归属标记不是当前协议，或没有归属标记，脚本会停止；确认要强制移除整套 Xray 时才加 `--force`。
+
+### 本地 Command Line Client
+
+P2 第一版新增 `client/vrs-client.sh`。它读取远端生成的 `vless-reality.json`，在本地生成 Xray client config，并提供基本启停、状态、日志和连线检查命令。第一版只支援 VLESS + Reality，适用 macOS + Linux。
+
+本地需要先安装 Xray-core，并确认 `xray` 在 `PATH` 中；或通过 `XRAY_BIN=/path/to/xray` 指定执行档。
+
+```bash
+# 安装或检查本地 Xray-core
+bash client/vrs-client.sh install-core
+bash client/vrs-client.sh check-core
+
+# 匯入远端取回的 JSON contract；priority 数值越小越优先
+bash client/vrs-client.sh import ./vless-reality.json --name my-node --priority 10
+
+# 选择线路；会写入 current、启动连线，并立刻检查是否正常连线
+bash client/vrs-client.sh use --name my-node
+
+# 自动选择线路；依序考虑 priority、连通性、延迟、失败次数
+bash client/vrs-client.sh auto-use
+
+# 单次健康检查；current 不可用时会自动尝试切线
+bash client/vrs-client.sh watch --once
+
+# 前景 watcher；定期检查 current，不可用时自动重连/切线
+bash client/vrs-client.sh watch --interval 60
+
+# 查看目前线路、状态与本地代理端口
+bash client/vrs-client.sh current
+bash client/vrs-client.sh status
+bash client/vrs-client.sh list --sorted
+
+# 透过本地 SOCKS 代理检查连线
+bash client/vrs-client.sh check
+
+# 停止本地代理
+bash client/vrs-client.sh stop
+
+# 安装成使用者层级背景服务
+bash client/vrs-client.sh service install --name my-node
+bash client/vrs-client.sh service status --name my-node
+bash client/vrs-client.sh service uninstall --name my-node
+
+# 安装 watcher 使用者层级背景服务
+bash client/vrs-client.sh watch-service install --interval 60
+bash client/vrs-client.sh watch-service status
+bash client/vrs-client.sh watch-service uninstall
+```
+
+默认本地端口：
+
+| 类型 | 地址 |
+|------|------|
+| SOCKS | `127.0.0.1:10808` |
+| HTTP | `127.0.0.1:10809` |
+
+本地状态目录默认在 `$HOME/.vrs/client`，可用 `VRS_CLIENT_HOME=/path/to/client-state` 覆盖。已支援多个 profile 的命名与列表，后续多线路备援会在这个基础上加入手动优先级、连通性、延迟与失败次数排序。
+
+多线路资料写入 `$HOME/.vrs/client/profiles/index.json`。`check` 成功时会写入 `lastStatus=online`、`latencyMs` 并重置 `failureCount`；失败时会写入 `lastStatus=offline` 并累加 `failureCount`。
+
+`auto-use` 会读取所有 `enabled=true` 的 profile，按 `priority`、`lastStatus`、`latencyMs`、`failureCount` 与名称排序后逐条尝试。第一条启动并检查成功的线路会成为 current；全部失败时返回非 0。
+
+`install-core` 在 macOS 优先使用 Homebrew 的 `brew install xray`。Linux 优先使用 Homebrew；若没有 Homebrew，则下载并执行 XTLS 官方 `Xray-install` 脚本安装 Xray-core。
+
+`service` 在 macOS 使用 `~/Library/LaunchAgents/io.punkcan.vrs.<name>.plist`，在 Linux 使用 `systemd --user` 的 `vrs-client-<name>.service`。服务模式会以前景执行 Xray，并由 launchd/systemd 管理重启。
+
+`watch` 会定期检查 current profile；如果 current 不可用，会调用 `auto-use` 依候选顺序重新启动或切换线路。`watch-service` 在 macOS 使用 `~/Library/LaunchAgents/io.punkcan.vrs.watch.plist`，在 Linux 使用 `systemd --user` 的 `vrs-client-watch.service`。watcher 日志写入 `$HOME/.vrs/client/logs/watcher.log`。
+
 ## 📁 项目结构
 
 ```
@@ -114,6 +190,10 @@ vless-reality-setup/
 ├── uninstall-centos.sh     # VLESS+Reality 卸载 (CentOS)
 ├── show-config.sh          # 查看配置
 ├── health-check.sh         # 健康检查
+├── client/
+│   └── vrs-client.sh       # 本地 Xray command line client
+├── docs/
+│   └── ai-contract/        # AI 自动部署 JSON/YAML 合约
 │
 ├── vless-ws/               # VLESS + WebSocket + TLS
 │   ├── install.sh / install-centos.sh
@@ -159,6 +239,15 @@ vless-reality-setup/
     ├── install.sh / install-centos.sh
     └── uninstall.sh / uninstall-centos.sh
 ```
+
+## 开发验证
+
+```bash
+bash -n *.sh */*.sh
+bash client/test-vrs-client.sh
+```
+
+`client/test-vrs-client.sh` 是离线 regression test，不需要真实 Xray-core 或真实远端节点。它会使用 `/private/tmp` 的临时状态目录，验证本地 CLI 的匯入、index、Xray config 生成、失败路径状态回写、`auto-use` 与 `watch --once`。
 
 ---
 
@@ -297,7 +386,15 @@ sudo bash ipsec/show-config.sh             # 查看配置
 每个协议都有对应的卸载脚本：
 
 ```bash
+sudo bash uninstall.sh
 sudo bash <协议目录>/uninstall.sh
+```
+
+Xray-backed 协议的卸载脚本会先检查 `/usr/local/etc/xray/vrs-protocol`。只有归属标记符合当前协议时才会继续移除 Xray；如果你确认要移除未标记或其他协议标记的 Xray，才使用 `--force`：
+
+```bash
+sudo bash uninstall.sh --force
+sudo bash <协议目录>/uninstall.sh --force
 ```
 
 ## 📝 客户端推荐

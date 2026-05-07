@@ -1,5 +1,227 @@
 # WORKLOG - vless-reality-setup
 
+## 2026-05-07 P3.1 Xray-backed 协议覆盖与卸载保护
+
+### 本次落地
+
+- 新增 `lib/xray-protocol-guard.sh`，集中处理 Xray 配置归属标记、`--replace` 与 `--force` 参数。
+- `vless-ws/`、`trojan/`、`shadowsocks/`、`shadowsocks-2022/` 的 Debian/Ubuntu 与 CentOS/RHEL install 脚本都会在写入 `/usr/local/etc/xray/config.json` 前检查 `/usr/local/etc/xray/vrs-protocol`。
+- 上述协议安装完成后会写入对应协议标记，避免后续安装无声覆盖其他协议。
+- 根目录 VLESS + Reality 与上述 Xray-backed 协议的 uninstall 脚本都会先检查归属标记；归属不一致或缺少标记时停止，确认强制移除时才允许 `--force`。
+- README、README.en、docs/ai-contract 与 TODO 已同步说明目前仍不是多 Xray 协议共存模式，而是先防止覆盖与误删。
+
+### 验证
+
+- `bash -n lib/xray-protocol-guard.sh`
+- `bash -n` 覆盖所有本次修改的 Xray-backed install/uninstall 脚本。
+- `bash -n *.sh */*.sh`
+- `bash client/test-vrs-client.sh`
+- `git diff --check`
+- `bash vless-ws/install.sh --help`
+- `bash shadowsocks/install-centos.sh --help`
+- `bash uninstall.sh --help`
+- `bash trojan/uninstall-centos.sh --help`
+- `bash shadowsocks-2022/uninstall.sh --help`
+- `shellcheck` 本机未安装，未执行。
+
+## 2026-05-07 P2.7 本地 CLI 离线 regression test
+
+### 本次落地
+
+- 新增 `client/test-vrs-client.sh`。
+- 测试脚本使用 `/private/tmp/vrs-client-regression-$$` 作为临时 `VRS_CLIENT_HOME`，结束后清理。
+- 测试覆盖：
+  - `client/vrs-client.sh` 语法检查。
+  - 匯入 `alpha` / `beta` 两条 profile。
+  - `profiles/index.json` schema、current、priority 与 profile 资料。
+  - 生成的 Xray client config 是否为合法 JSON，且包含 SOCKS/HTTP inbound、VLESS outbound、Reality security。
+  - `list --sorted` 输出包含两条 profile。
+  - `check --name beta` 在未运行时会失败，并写入 `offline` 与 `failureCount=1`。
+  - `auto-use` 在没有本地 `xray` 时会逐条失败，并写回 offline/failureCount。
+  - `watch --once` 会先检查 current，再 fallback 到 `auto-use`。
+  - 无效 interval、缺少 `service` / `watch-service` 子命令会失败。
+  - `config` 会显示 watcher log 路径。
+
+### 验证
+
+- `bash client/test-vrs-client.sh`
+
+## 2026-05-07 P2.5 背景健康检查与断线重连 watcher
+
+### 本次落地
+
+- `client/vrs-client.sh` 新增 `watch [--interval SEC] [--url URL] [--once]`。
+- `watch --once` 会检查 current profile；如果 current 不可用，会调用 `auto-use` 自动尝试候选线路。
+- `watch` 前景循环默认每 60 秒检查一次，可通过 `--interval` 调整，范围为 5-86400 秒。
+- `auto-use` 在尝试候选线路前会停止该候选的既有 runtime，再重新启动并检查，用于断线重连。
+- 新增 `watch-service install|uninstall|start|stop|restart|status`，提供使用者层级背景 watcher。
+- macOS watcher 使用 `~/Library/LaunchAgents/io.punkcan.vrs.watch.plist`。
+- Linux watcher 使用 `systemd --user` 的 `vrs-client-watch.service`。
+- watcher 日志写入 `$VRS_CLIENT_HOME/logs/watcher.log`；`logs` 与 `config` 会显示 watcher log。
+
+### 尚未处理
+
+- 当前机器没有本地 `xray`，所以只验证失败路径；真实启动成功、SOCKS 检查成功、watcher 自动恢复需要装好 Xray 后补测。
+- 还没把 watcher 服务实际安装到本机 launchd/systemd，避免未经确认改动本机常驻服务。
+
+### 验证
+
+- `bash -n client/vrs-client.sh`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p25 bash client/vrs-client.sh import docs/ai-contract/vless-reality.example.json --name alpha --priority 10`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p25 bash client/vrs-client.sh import docs/ai-contract/vless-reality.example.json --name beta --priority 20`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p25 bash client/vrs-client.sh watch --once --interval 5`，当前机器无 `xray`，预期检查 current 失败后调用 `auto-use`，最终 exit 1。
+- `bash client/vrs-client.sh watch --interval 1 --once`，预期回报 interval 范围错误。
+- `bash client/vrs-client.sh watch-service`，预期回报缺少子命令。
+- `node -e` 读取 `/private/tmp/vrs-client-test-p25/profiles/index.json`，确认 alpha/beta 写为 `offline` 且 failure count 已累加。
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p25-final bash client/vrs-client.sh config`，确认会显示 watcher log 路径。
+- `node -e` 读取 `/private/tmp/vrs-client-test-p25-final/xray/alpha.config.json`，确认 Xray config 仍是合法 JSON。
+
+## 2026-05-07 P2.4 自动选线 auto-use
+
+### 本次落地
+
+- `client/vrs-client.sh` 新增 `auto-use [--url URL]`。
+- 新增 `list --sorted`，显示自动选线候选顺序。
+- 自动候选只包含 `enabled=true` 的 profile。
+- 候选排序依序使用：`priority` 小到大、`lastStatus` 排序为 `online` 优先于 `unknown` 优先于 `offline`、`latencyMs` 小到大、`failureCount` 小到大、profile 名称稳定排序。
+- `auto-use` 会逐条调用 `use --name <profile>`，每条线路都会执行启动与连线检查；第一条成功的线路会成为 current。
+- 单条线路失败不会中断整个 `auto-use`，会继续试下一条；全部失败时 exit 1。
+
+### 尚未处理
+
+- 当前机器没有本地 `xray`，所以 P2.4 验证只覆盖失败路径；真实启动成功与 SOCKS 连线成功需要装好 Xray 后补测。
+- 还没有背景 watcher 做定时健康检查和断线自动重连。
+
+### 验证
+
+- `bash -n client/vrs-client.sh`
+- `bash -n *.sh */*.sh`
+- `bash client/vrs-client.sh help`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p24 bash client/vrs-client.sh import docs/ai-contract/vless-reality.example.json --name alpha --priority 10`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p24 bash client/vrs-client.sh import docs/ai-contract/vless-reality.example.json --name beta --priority 20`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p24 bash client/vrs-client.sh list --sorted`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p24 bash client/vrs-client.sh auto-use`，当前机器无 `xray`，预期逐条尝试 alpha 与 beta，全部失败后 exit 1。
+- `node -e` 读取 `/private/tmp/vrs-client-test-p24/profiles/index.json`，确认 `current=beta`，alpha 与 beta 都写为 `offline` 且 failure count 已累加。
+- `node -e` 读取 `/private/tmp/vrs-client-test-p24-final/xray/alpha.config.json`，确认 Xray config 仍是合法 JSON。
+- `git diff --check`
+
+## 2026-05-07 P2.3 多线路资料模型与手动切换
+
+### 本次落地
+
+- 新增 `$VRS_CLIENT_HOME/profiles/index.json`，schema 为 `vrs.client.profiles.v1`。
+- index 记录 `current` 与每个 profile 的 `priority`、`enabled`、`lastStatus`、`latencyMs`、`failureCount`、`lastCheckedAt`、`lastUsedAt`、`profilePath`、`xrayConfigPath`。
+- `import` 新增 `--priority N`，数值越小越优先；匯入后会写入 index。
+- `list` 改为从 index 输出 priority、enabled、status、latency、failure count、runtime，并用 `*` 标示 current。
+- 新增 `current` 命令，显示当前 profile 并接着显示状态。
+- 新增 `use --name NAME [--url URL]`：选择线路、停止旧线路、写入 current、启动新线路，然后执行连线检查。
+- `check` 成功会写 `lastStatus=online`、`latencyMs` 并重置 `failureCount`；失败会写 `lastStatus=offline` 并累加 `failureCount`。
+- index 写入新增轻量 lock，避免多个 CLI 进程同时匯入 profile 时覆盖彼此。
+
+### 尚未处理
+
+- 还没有自动选择最佳线路；下一步才会按「手动优先级、连通性、延迟、失败次数」排序并切换。
+- 当前机器没有本地 `xray`，所以 `use` 的成功启动与真实连线检查尚未实测；已验证缺少 Xray 时会把线路记为 offline 并累加失败次数。
+
+### 验证
+
+- `bash -n client/vrs-client.sh`
+- `bash -n *.sh */*.sh`
+- `bash client/vrs-client.sh help`
+- 并发执行两次 `import` 到同一个 `VRS_CLIENT_HOME`，确认 index lock 后 `alpha` / `beta` 都保留。
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p23-lock bash client/vrs-client.sh list`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p23-lock bash client/vrs-client.sh current`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p23-lock bash client/vrs-client.sh check --name beta`，预期因为未运行而写入 `offline` 与 `failureCount=1`。
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p23-lock bash client/vrs-client.sh use --name beta`，当前机器无 `xray`，预期选择 beta 后写入 `offline` 并累加失败次数。
+- `node -e` 读取 `/private/tmp/vrs-client-test-p23-final/profiles/index.json` 与 `alpha.config.json`，确认 index 与 Xray config 都是合法 JSON。
+- `git diff --check`
+- `shellcheck` 本机未安装，未执行。
+
+## 2026-05-07 P2.2 本地 Client 服务化入口
+
+### 本次落地
+
+- `client/vrs-client.sh` 新增 `service install|uninstall|start|stop|restart|status`。
+- macOS 使用使用者层级 launchd plist：`~/Library/LaunchAgents/io.punkcan.vrs.<name>.plist`。
+- Linux 使用 systemd user unit：`$XDG_CONFIG_HOME/systemd/user/vrs-client-<name>.service` 或 `$HOME/.config/systemd/user/vrs-client-<name>.service`。
+- 新增内部 `run-foreground` 命令，service 模式会以前景执行 Xray，让 launchd/systemd 负责进程管理与重启。
+- `status` / `list` 会辨识 service 运行状态；若 profile 由 service 管理，普通 `stop` 会提示改用 `service stop`。
+
+### 尚未处理
+
+- 还没有在真实 macOS launchd / Linux systemd 环境执行安装服务测试。
+- 还没有多线路自动排序与切换。
+- 还没有独立 watcher 负责连通性、延迟、失败次数统计。
+
+### 验证
+
+- `bash -n client/vrs-client.sh`
+- `bash -n *.sh */*.sh`
+- `bash client/vrs-client.sh help`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p22 bash client/vrs-client.sh import docs/ai-contract/vless-reality.example.json --name p22-test`
+- `node -e "JSON.parse(require('fs').readFileSync('/private/tmp/vrs-client-test-p22/xray/p22-test.config.json','utf8')); console.log('ok')"`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p22 bash client/vrs-client.sh status --name p22-test`
+- `bash client/vrs-client.sh service`，预期以 exit 1 回报缺少 service 子命令。
+- `git diff --check`
+
+## 2026-05-07 P2.1 本地 Xray-core 安装入口
+
+### 本次落地
+
+- `client/vrs-client.sh` 新增 `install-core` 命令。
+- 若本地已存在 `xray` 或 `XRAY_BIN` 指定的可执行档，`install-core` 会直接转为 `check-core` 并显示版本。
+- macOS 自动安装优先使用 Homebrew：`brew install xray`。
+- Linux 自动安装优先使用 Homebrew；如果没有 Homebrew，则下载 XTLS 官方 `Xray-install` 脚本并执行 `install --without-logfiles --no-update-service`。
+- `check-core` 在当前开发机上验证为正确回报「找不到本地 Xray-core」，未误判成已安装。
+
+### 尚未处理
+
+- 还没做 macOS launchd / Linux systemd 的 VRS client profile 服务化。
+- 还没做 `install-core --dry-run` 或安装前确认提示；当前行为是使用者显式执行 `install-core` 才安装。
+
+### 验证
+
+- `bash -n client/vrs-client.sh`
+- `bash -n *.sh */*.sh`
+- `bash client/vrs-client.sh help`
+- `bash client/vrs-client.sh check-core`，当前机器没有 `xray`，预期以 exit 1 回报缺少 core。
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test-p21 bash client/vrs-client.sh import docs/ai-contract/vless-reality.example.json --name p21-test`
+- `node -e "JSON.parse(require('fs').readFileSync('/private/tmp/vrs-client-test-p21/xray/p21-test.config.json','utf8')); console.log('ok')"`
+- 确认 `/private/tmp/vrs-client-test-p21/profiles/p21-test.json` 与 `/private/tmp/vrs-client-test-p21/xray/p21-test.config.json` 为 `-rw-------`。
+- `git diff --check`
+
+## 2026-05-07 P2 本地 CLI Client 第一版
+
+### 本次落地
+
+- 新增 `client/vrs-client.sh`，第一版只支援匯入 VLESS + Reality 的 `vless-reality.json`。
+- 本地状态目录默认使用 `$HOME/.vrs/client`，可通过 `VRS_CLIENT_HOME` 覆盖。
+- 本地 profile 路径为 `profiles/<name>.json`，Xray client config 路径为 `xray/<name>.config.json`。
+- 默认提供本地 SOCKS `127.0.0.1:10808` 与 HTTP `127.0.0.1:10809` inbound，可通过 `VRS_SOCKS_PORT` / `VRS_HTTP_PORT` 覆盖。
+- 支援命令：`import`、`start`、`stop`、`restart`、`status`、`check`、`logs`、`list`、`export`、`config`、`check-core`。
+- `import` 会验证 `schemaVersion=vrs.vless-reality.v1`、`protocol=vless-reality`、`core=xray-core`、`transport=tcp`、`security=reality`。
+- 本地 profile、Xray config 与 log/pid 文件会尽量设为 `chmod 600`，状态目录设为 `chmod 700`。
+
+### 尚未处理
+
+- 还没有自动安装本地 Xray-core；当前只做侦测，使用者需先安装 `xray` 或设定 `XRAY_BIN=/path/to/xray`。
+- 还没有 macOS launchd / Linux systemd 整合。
+- 多线路目前只有 profile 命名与列表基础，还没有自动排序与切换。
+- 断线重连与背景健康检查留到后续 P2.x。
+
+### 验证
+
+- `bash -n client/vrs-client.sh`
+- `bash -n *.sh */*.sh`
+- `bash client/vrs-client.sh help`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test bash client/vrs-client.sh import docs/ai-contract/vless-reality.example.json --name test`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test bash client/vrs-client.sh status --name test`
+- `VRS_CLIENT_HOME=/private/tmp/vrs-client-test bash client/vrs-client.sh list`
+- `node -e "JSON.parse(require('fs').readFileSync('/private/tmp/vrs-client-test/xray/test.config.json','utf8')); console.log('ok')"`
+- 确认 `/private/tmp/vrs-client-test/profiles/test.json` 与 `/private/tmp/vrs-client-test/xray/test.config.json` 为 `-rw-------`。
+- `git diff --check`
+- `shellcheck` 本机未安装，未执行。
+
 ## 2026-05-07 AI 自动部署第一版范围与 P0 修补
 
 ### P1 AI command 合约

@@ -24,6 +24,8 @@ sudo bash install-centos.sh --yes --port 443 --dest www.microsoft.com --dest-por
 
 若已存在 Xray 配置，脚本会停止，避免覆盖其他协议。确认要替换时才加 `--replace`。
 
+安装成功后会写入 `/usr/local/etc/xray/vrs-protocol`，标记当前 Xray 配置属于 `vless-reality`。自动化卸载时也会先检查这个标记；只有归属相符才会继续移除 Xray。确认要移除未标记或其他协议标记的 Xray 时，才使用 `--force`。
+
 ## 输出位置
 
 安装完成后固定生成：
@@ -36,6 +38,37 @@ sudo bash install-centos.sh --yes --port 443 --dest www.microsoft.com --dest-por
 | `/usr/local/etc/xray/client-config.txt` | 人类可读完整配置 |
 
 这些输出含有可连线凭证，脚本会设为 `chmod 600`。
+
+## 本地 CLI 汇入
+
+取回 `/usr/local/etc/xray/vless-reality.json` 后，可在本地 macOS 或 Linux 使用 `client/vrs-client.sh` 生成 Xray client config：
+
+```bash
+bash client/vrs-client.sh install-core
+bash client/vrs-client.sh check-core
+bash client/vrs-client.sh import ./vless-reality.json --name my-node --priority 10
+bash client/vrs-client.sh use --name my-node
+bash client/vrs-client.sh auto-use
+bash client/vrs-client.sh watch --once
+bash client/vrs-client.sh watch-service install --interval 60
+bash client/vrs-client.sh current
+bash client/vrs-client.sh check
+bash client/vrs-client.sh service install --name my-node
+```
+
+第一版本地 CLI 只支援本合约，不读取 YAML。默认本地状态目录为 `$HOME/.vrs/client`，profile 与本地 Xray config 会设为 `chmod 600`。
+
+多线路状态写入 `$HOME/.vrs/client/profiles/index.json`。`use --name NAME` 会选择线路、启动连线，并立刻通过 `check` 检查连线是否可用。
+
+`auto-use` 会按手动优先级、连通性、延迟与失败次数逐条尝试候选线路，第一条启动并检查成功的线路会成为 current。
+
+`watch` 会检查 current profile；current 不可用时会调用 `auto-use` 自动重连或切换线路。`watch-service` 可把 watcher 安装成使用者层级背景服务。
+
+本地 CLI 的离线 regression test：
+
+```bash
+bash client/test-vrs-client.sh
+```
 
 ## 字段约定
 
