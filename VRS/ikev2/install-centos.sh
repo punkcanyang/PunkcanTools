@@ -130,12 +130,23 @@ start_service() {
 }
 
 configure_firewall() {
+    local handled=false
     if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
         ensure_ssh_firewalld_rules
         firewall-cmd --permanent --add-port=500/udp --add-port=4500/udp > /dev/null 2>&1
         firewall-cmd --permanent --add-masquerade > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
         log_success "firewalld 已配置，SSH 端口已保留"
+        handled=true
+    fi
+    if [[ "$handled" != "true" ]] && command -v iptables &> /dev/null; then
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p udp --dport 500 -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport 500 -j ACCEPT
+        iptables -C INPUT -p udp --dport 4500 -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport 4500 -j ACCEPT
+        if command -v iptables-save &>/dev/null; then
+            iptables-save > /etc/sysconfig/iptables 2>/dev/null || true
+        fi
+        log_success "iptables 已开放 500/4500 udp，SSH 端口已保留"
     fi
 }
 

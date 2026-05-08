@@ -15,7 +15,7 @@ XRAY_DIR="${VRS_CLIENT_HOME}/xray"
 RUN_DIR="${VRS_CLIENT_HOME}/run"
 LOG_DIR="${VRS_CLIENT_HOME}/logs"
 INDEX_FILE="${PROFILES_DIR}/index.json"
-INDEX_LOCK_DIR="${PROFILES_DIR}/index.lock"
+INDEX_LOCK_FILE="${PROFILES_DIR}/index.lock"
 SOCKS_PORT="${VRS_SOCKS_PORT:-10808}"
 HTTP_PORT="${VRS_HTTP_PORT:-10809}"
 
@@ -269,23 +269,69 @@ write_json_atomic() {
 }
 
 lock_index() {
-    local i
+    if [[ -n "${VRS_INDEX_LOCK_HELD:-}" ]]; then
+        # Reentrant: same process already owns the lock; nest depth tracked by env var.
+        VRS_INDEX_LOCK_HELD=$((VRS_INDEX_LOCK_HELD + 1))
+        export VRS_INDEX_LOCK_HELD
+        return 0
+    fi
 
-    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-        if mkdir "$INDEX_LOCK_DIR" 2>/dev/null; then
-            trap 'rmdir "$INDEX_LOCK_DIR" 2>/dev/null || true' EXIT
-            return
+    mkdir -p "$(dirname "$INDEX_LOCK_FILE")"
+
+    if command -v flock >/dev/null 2>&1; then
+        # Open fd 9 on the lockfile and acquire an exclusive flock with a 5 s timeout.
+        exec 9>"$INDEX_LOCK_FILE"
+        if ! flock -x -w 5 9; then
+            log_error "profile index 正在被其他进程写入，请稍后重试"
+            exec 9>&-
+            exit 1
+        fi
+        VRS_INDEX_LOCK_HELD=1
+        export VRS_INDEX_LOCK_HELD
+        return 0
+    fi
+
+    # Fallback: PID-stamped mkdir lock for systems without flock.
+    local i pid_file
+    pid_file="${INDEX_LOCK_FILE}.pid"
+    for i in $(seq 1 50); do
+        if mkdir "$INDEX_LOCK_FILE" 2>/dev/null; then
+            echo "$$" > "$pid_file"
+            VRS_INDEX_LOCK_HELD=1
+            export VRS_INDEX_LOCK_HELD
+            return 0
+        fi
+        # Stale lock detection: if owner PID is gone, reclaim.
+        if [[ -f "$pid_file" ]]; then
+            local owner
+            owner=$(cat "$pid_file" 2>/dev/null || echo "")
+            if [[ -n "$owner" ]] && ! kill -0 "$owner" 2>/dev/null; then
+                rm -rf "$INDEX_LOCK_FILE" 2>/dev/null || true
+            fi
         fi
         sleep 0.1
     done
-
     log_error "profile index 正在被其他进程写入，请稍后重试"
     exit 1
 }
 
 unlock_index() {
-    rmdir "$INDEX_LOCK_DIR" 2>/dev/null || true
-    trap - EXIT
+    if [[ -z "${VRS_INDEX_LOCK_HELD:-}" ]]; then
+        return 0
+    fi
+    if (( VRS_INDEX_LOCK_HELD > 1 )); then
+        VRS_INDEX_LOCK_HELD=$((VRS_INDEX_LOCK_HELD - 1))
+        export VRS_INDEX_LOCK_HELD
+        return 0
+    fi
+    if command -v flock >/dev/null 2>&1; then
+        flock -u 9 2>/dev/null || true
+        exec 9>&- 2>/dev/null || true
+    else
+        rm -rf "$INDEX_LOCK_FILE" 2>/dev/null || true
+        rm -f "${INDEX_LOCK_FILE}.pid" 2>/dev/null || true
+    fi
+    unset VRS_INDEX_LOCK_HELD
 }
 
 index_set_profile() {

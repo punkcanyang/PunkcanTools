@@ -143,12 +143,30 @@ start_wireguard() {
 }
 
 configure_firewall() {
+    local handled=false
     if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
         ensure_ssh_firewalld_rules
         firewall-cmd --permanent --add-port=${PORT}/udp > /dev/null 2>&1
         firewall-cmd --permanent --add-masquerade > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
         log_success "firewalld 已开放 ${PORT}/udp，SSH 端口已保留"
+        handled=true
+    fi
+    if [[ "$handled" != "true" ]] && command -v iptables &> /dev/null; then
+        ensure_ssh_iptables_rules
+        iptables -C INPUT -p udp --dport "${PORT}" -j ACCEPT 2>/dev/null || \
+            iptables -I INPUT -p udp --dport "${PORT}" -j ACCEPT
+        # NAT MASQUERADE for VPN egress
+        local nic
+        nic=$(ip route show default 2>/dev/null | awk '/^default/ {print $5; exit}')
+        if [[ -n "$nic" ]]; then
+            iptables -t nat -C POSTROUTING -o "$nic" -j MASQUERADE 2>/dev/null || \
+                iptables -t nat -A POSTROUTING -o "$nic" -j MASQUERADE
+        fi
+        if command -v iptables-save &>/dev/null; then
+            iptables-save > /etc/sysconfig/iptables 2>/dev/null || true
+        fi
+        log_success "iptables 已开放 ${PORT}/udp，SSH 端口已保留"
     fi
 }
 

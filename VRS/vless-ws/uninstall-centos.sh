@@ -12,6 +12,7 @@ XRAY_CONFIG_FILE="${XRAY_CONFIG_DIR}/config.json"
 VRS_PROTOCOL_ID="vless-ws"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
+source "${SCRIPT_DIR}/../lib/installer-helpers.sh"
 
 main() {
     echo -e "${CYAN}"
@@ -28,7 +29,7 @@ main() {
 
     systemctl stop xray 2>/dev/null || true
     systemctl disable xray 2>/dev/null || true
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove --purge 2>/dev/null || {
+    secure_run_xray_installer @ remove --purge 2>/dev/null || {
         rm -f /usr/local/bin/xray; rm -rf /usr/local/etc/xray; rm -rf /usr/local/share/xray
         rm -f /etc/systemd/system/xray.service; systemctl daemon-reload
     }

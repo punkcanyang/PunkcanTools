@@ -5,6 +5,9 @@
 # 检查 Xray 服务状态并在异常时自动重启
 #===============================================================================
 
+set -u
+set -o pipefail
+
 #-------------------------------------------------------------------------------
 # 颜色定义
 #-------------------------------------------------------------------------------
@@ -55,13 +58,16 @@ check_xray_service() {
 # 检查 Xray 端口是否监听
 #-------------------------------------------------------------------------------
 check_xray_port() {
-    local port=$(jq -r '.inbounds[0].port' /usr/local/etc/xray/config.json 2>/dev/null)
-    
+    local port
+    port=$(jq -r '.inbounds[0].port' /usr/local/etc/xray/config.json 2>/dev/null)
+
     if [[ -z "$port" || "$port" == "null" ]]; then
         port=443
     fi
-    
-    if ss -tlnp | grep -q ":${port}"; then
+
+    # Match exact port: ":${port} " (sockaddr format) or ":${port}$" (no trailing process info).
+    # Without the boundary, ":443" would match ":4430", ":4431", etc.
+    if ss -tlnp 2>/dev/null | awk -v p=":${port}" '$0 ~ p"( |$)" {found=1} END {exit !found}'; then
         return 0
     else
         return 1

@@ -170,9 +170,10 @@ generate_client_config() {
     local server_ip
     server_ip=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "YOUR_SERVER_IP")
 
-    # SS-2022 分享链接
+    # SS-2022 分享链接 (SIP002 base64url)
     local user_info
-    user_info=$(echo -n "${METHOD}:${PASSWORD}" | base64 -w 0 2>/dev/null || echo -n "${METHOD}:${PASSWORD}" | base64)
+    user_info=$(printf '%s' "${METHOD}:${PASSWORD}" | base64 -w 0 2>/dev/null | tr '+/' '-_' | tr -d '=' \
+        || printf '%s' "${METHOD}:${PASSWORD}" | openssl base64 -A | tr '+/' '-_' | tr -d '=')
     local share_link="ss://${user_info}@${server_ip}:${PORT}#SS-2022"
 
     echo -n "$share_link" > "$SHARE_LINK_FILE"

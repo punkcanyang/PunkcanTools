@@ -169,9 +169,10 @@ generate_client_config() {
     local server_ip
     server_ip=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "YOUR_SERVER_IP")
 
-    # SS 分享链接格式: ss://BASE64(method:password)@server:port#name
+    # SS 分享链接格式: ss://base64url(method:password)@server:port#name (SIP002)
     local user_info
-    user_info=$(echo -n "${METHOD}:${PASSWORD}" | base64 -w 0 2>/dev/null || echo -n "${METHOD}:${PASSWORD}" | base64)
+    user_info=$(printf '%s' "${METHOD}:${PASSWORD}" | base64 -w 0 2>/dev/null | tr '+/' '-_' | tr -d '=' \
+        || printf '%s' "${METHOD}:${PASSWORD}" | openssl base64 -A | tr '+/' '-_' | tr -d '=')
     local share_link="ss://${user_info}@${server_ip}:${PORT}#Shadowsocks"
 
     echo -n "$share_link" > "$SHARE_LINK_FILE"

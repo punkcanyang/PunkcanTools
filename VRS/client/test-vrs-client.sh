@@ -5,9 +5,11 @@ SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 CLIENT_SCRIPT="$SCRIPT_DIR/vrs-client.sh"
 EXAMPLE_JSON="$REPO_ROOT/docs/ai-contract/vless-reality.example.json"
-TEST_HOME="/private/tmp/vrs-client-regression-$$"
-ALPHA_OUT="/private/tmp/vrs-client-test-alpha-$$.out"
-BETA_OUT="/private/tmp/vrs-client-test-beta-$$.out"
+TMPROOT="${TMPDIR:-/tmp}"
+TMPROOT="${TMPROOT%/}"
+TEST_HOME="${TMPROOT}/vrs-client-regression-$$"
+ALPHA_OUT="${TMPROOT}/vrs-client-test-alpha-$$.out"
+BETA_OUT="${TMPROOT}/vrs-client-test-beta-$$.out"
 
 cleanup() {
     rm -rf "$TEST_HOME"

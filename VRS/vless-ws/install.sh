@@ -42,6 +42,7 @@ VRS_PROTOCOL_ID="vless-ws"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
 source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+source "${SCRIPT_DIR}/../lib/uri-encode.sh"
 
 # 默认配置
 PORT=443
@@ -277,7 +278,10 @@ generate_client_config() {
 
     # VLESS 分享链接
     # 注意：自签证书需要客户端允许不安全连接 (allowInsecure=1)
-    local share_link="vless://${UUID}@${server_ip}:${PORT}?encryption=none&security=tls&type=ws&host=${server_ip}&path=${WS_PATH}&allowInsecure=1#VLESS-WS-TLS"
+    local encoded_path encoded_host
+    encoded_path=$(uri_encode_component "${WS_PATH}")
+    encoded_host=$(uri_encode_component "${server_ip}")
+    local share_link="vless://${UUID}@${server_ip}:${PORT}?encryption=none&security=tls&type=ws&host=${encoded_host}&path=${encoded_path}&allowInsecure=1#VLESS-WS-TLS"
 
     echo -n "$share_link" > "$SHARE_LINK_FILE"
     chmod 600 "$SHARE_LINK_FILE"

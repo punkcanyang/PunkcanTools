@@ -26,6 +26,7 @@ VRS_PROTOCOL_ID="vless-ws"
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 source "${SCRIPT_DIR}/../lib/xray-protocol-guard.sh"
 source "${SCRIPT_DIR}/../lib/firewall-ssh-guard.sh"
+source "${SCRIPT_DIR}/../lib/uri-encode.sh"
 
 PORT=443
 WS_PATH="/ws"
@@ -198,7 +199,10 @@ generate_client_config() {
     log_info "生成客户端配置..."
     local server_ip
     server_ip=$(curl -s4 ifconfig.me || curl -s4 ip.sb || echo "YOUR_SERVER_IP")
-    local share_link="vless://${UUID}@${server_ip}:${PORT}?encryption=none&security=tls&type=ws&host=${server_ip}&path=${WS_PATH}&allowInsecure=1#VLESS-WS-TLS"
+    local share_link encoded_path encoded_host
+    encoded_path=$(uri_encode_component "${WS_PATH}")
+    encoded_host=$(uri_encode_component "${server_ip}")
+    share_link="vless://${UUID}@${server_ip}:${PORT}?encryption=none&security=tls&type=ws&host=${encoded_host}&path=${encoded_path}&allowInsecure=1#VLESS-WS-TLS"
     echo -n "$share_link" > "$SHARE_LINK_FILE"
     chmod 600 "$SHARE_LINK_FILE"
 

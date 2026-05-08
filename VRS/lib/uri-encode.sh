@@ -9,8 +9,8 @@ uri_encode_component() {
     local char
     local hex
     local i
+    local LC_ALL=C
 
-    LC_ALL=C
     for ((i = 0; i < ${#input}; i++)); do
         char="${input:i:1}"
         case "$char" in

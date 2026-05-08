@@ -36,9 +36,17 @@ VLESS_LINK_FILE="${XRAY_CONFIG_DIR}/vless-link.txt"
 QR_CODE_FILE="${XRAY_CONFIG_DIR}/vless-qrcode.png"
 STRUCTURED_JSON_FILE="${XRAY_CONFIG_DIR}/vless-reality.json"
 STRUCTURED_YAML_FILE="${XRAY_CONFIG_DIR}/vless-reality.yaml"
-XRAY_PROTOCOL_MARKER="${XRAY_CONFIG_DIR}/vrs-protocol"
-XRAY_PROTOCOL_ID="vless-reality"
+VRS_PROTOCOL_ID="vless-reality"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VRS_LIB_DIR="${VRS_LIB_DIR:-${SCRIPT_DIR}/lib}"
+# shellcheck source=lib/firewall-ssh-guard.sh
+source "${VRS_LIB_DIR}/firewall-ssh-guard.sh"
+# shellcheck source=lib/xray-protocol-guard.sh
+source "${VRS_LIB_DIR}/xray-protocol-guard.sh"
+# shellcheck source=lib/network-utils.sh
+source "${VRS_LIB_DIR}/network-utils.sh"
+# shellcheck source=lib/installer-helpers.sh
+source "${VRS_LIB_DIR}/installer-helpers.sh"
 
 # 默认配置
 PORT=443
@@ -189,18 +197,6 @@ validate_args() {
 }
 
 # 进度指示器
-show_progress() {
-    local pid=$1
-    local msg=$2
-    local spin='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
-    local i=0
-    while kill -0 $pid 2>/dev/null; do
-        printf "\r${YELLOW}[%s]${NC} %s " "${spin:i++%10:1}" "$msg"
-        sleep 0.1
-    done
-    printf "\r"
-}
-
 print_banner() {
     echo -e "${CYAN}"
     echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -311,70 +307,11 @@ check_port() {
 }
 
 check_xray_config_conflict() {
-    if [[ ! -f "$XRAY_CONFIG_FILE" ]]; then
-        return 0
+    if [[ "$REPLACE_EXISTING" == "true" ]]; then
+        ALLOW_REPLACE=true
     fi
-
-    local existing_protocol="unknown"
-    if [[ -f "$XRAY_PROTOCOL_MARKER" ]]; then
-        existing_protocol=$(cat "$XRAY_PROTOCOL_MARKER")
-    fi
-
-    if [[ "$existing_protocol" == "$XRAY_PROTOCOL_ID" ]]; then
-        log_warn "检测到既有 VLESS + Reality 配置，本次安装会更新该配置"
-        return 0
-    fi
-
-    if [[ "$REPLACE_EXISTING" != "true" ]]; then
-        log_error "检测到既有 Xray 配置: $XRAY_CONFIG_FILE"
-        log_error "为避免覆盖其他 Xray 协议，请先卸载旧配置，或明确使用: sudo bash $0 --replace"
-        exit 1
-    fi
-
-    log_warn "--replace 已指定，将覆盖既有 Xray 配置 (${existing_protocol})"
-}
-
-detect_ssh_ports() {
-    {
-        if [[ -n "${SSH_CONNECTION:-}" ]]; then
-            echo "$SSH_CONNECTION" | awk '{print $4}'
-        fi
-
-        if command -v sshd > /dev/null 2>&1; then
-            sshd -T 2>/dev/null | awk '$1 == "port" {print $2}'
-        fi
-
-        if [[ -f /etc/ssh/sshd_config ]]; then
-            awk 'tolower($1) == "port" && $2 ~ /^[0-9]+$/ {print $2}' /etc/ssh/sshd_config
-        fi
-
-        echo "22"
-    } | awk '/^[0-9]+$/ && $1 > 0 && $1 < 65536 && !seen[$1]++'
-}
-
-ensure_ssh_firewalld_rules() {
-    local ssh_ports
-    ssh_ports=$(detect_ssh_ports)
-
-    while IFS= read -r ssh_port; do
-        if [[ -n "$ssh_port" ]]; then
-            firewall-cmd --permanent --add-port="${ssh_port}/tcp" > /dev/null 2>&1 || true
-            log_info "已确保 firewalld 允许 SSH 端口 ${ssh_port}/tcp"
-        fi
-    done <<< "$ssh_ports"
-}
-
-ensure_ssh_iptables_rules() {
-    local ssh_ports
-    ssh_ports=$(detect_ssh_ports)
-
-    while IFS= read -r ssh_port; do
-        if [[ -n "$ssh_port" ]]; then
-            iptables -C INPUT -p tcp --dport "$ssh_port" -j ACCEPT 2>/dev/null || \
-                iptables -I INPUT -p tcp --dport "$ssh_port" -j ACCEPT
-            log_info "已确保 iptables 允许 SSH 端口 ${ssh_port}/tcp"
-        fi
-    done <<< "$ssh_ports"
+    XRAY_CONFIG_FILE="$XRAY_CONFIG_FILE" XRAY_CONFIG_DIR="$XRAY_CONFIG_DIR" \
+    VRS_PROTOCOL_ID="$VRS_PROTOCOL_ID" check_xray_config_ownership
 }
 
 #-------------------------------------------------------------------------------
@@ -460,16 +397,18 @@ install_dependencies() {
 install_xray() {
     log_info "正在下载并安装 Xray-core (这可能需要几分钟)..."
     echo ""
-    
-    # 使用官方安装脚本 (显示输出)
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
-    
+
+    if ! secure_run_xray_installer @ install; then
+        log_error "Xray 安装脚本执行失败"
+        exit 1
+    fi
+
     echo ""
     if [[ ! -f /usr/local/bin/xray ]]; then
         log_error "Xray 安装失败"
         exit 1
     fi
-    
+
     # 获取版本信息
     XRAY_VERSION=$(/usr/local/bin/xray version | head -n1 | awk '{print $2}')
     log_success "Xray ${XRAY_VERSION} 安装完成"
@@ -497,6 +436,10 @@ generate_keys() {
         log_error "密钥生成失败"
         exit 1
     fi
+
+    # 规范公钥为 base64url，无 padding（Reality 客户端要求）
+    PUBLIC_KEY=$(to_base64url "$PUBLIC_KEY")
+    PRIVATE_KEY=$(to_base64url "$PRIVATE_KEY")
     
     # 生成 UUID
     if [[ -z "$UUID" ]]; then
@@ -578,10 +521,13 @@ generate_xray_config() {
 }
 EOF
 
-    echo "$XRAY_PROTOCOL_ID" > "$XRAY_PROTOCOL_MARKER"
+    chmod 600 "$XRAY_CONFIG_FILE"
+    chmod 700 "$XRAY_CONFIG_DIR"
+    write_xray_protocol_marker
 
     mkdir -p /var/log/xray
-    
+    chmod 750 /var/log/xray 2>/dev/null || true
+
     log_success "Xray 配置文件生成完成"
 }
 
@@ -611,32 +557,47 @@ configure_service() {
 #-------------------------------------------------------------------------------
 configure_firewall() {
     log_info "配置防火墙..."
-    
-    # 检测防火墙类型
+
+    local handled=false
+
     if command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
-        # 使用 firewalld
         ensure_ssh_firewalld_rules
         firewall-cmd --permanent --add-port="${PORT}/tcp" > /dev/null 2>&1
         firewall-cmd --reload > /dev/null 2>&1
         log_success "firewalld 防火墙已配置，端口 ${PORT} 已开放，SSH 端口已保留"
-    elif command -v iptables &> /dev/null; then
-        # 使用 iptables
+        handled=true
+    fi
+
+    if [[ "$handled" != "true" ]] && is_pure_nftables_backend; then
+        ensure_ssh_nftables_rules
+        nft list table inet vrs_proxy >/dev/null 2>&1 || nft add table inet vrs_proxy 2>/dev/null || true
+        nft list chain inet vrs_proxy input >/dev/null 2>&1 || \
+            nft 'add chain inet vrs_proxy input { type filter hook input priority 0 ; policy accept ; }' 2>/dev/null || true
+        if ! nft list chain inet vrs_proxy input 2>/dev/null | grep -q "tcp dport ${PORT} accept"; then
+            nft add rule inet vrs_proxy input tcp dport "${PORT}" accept 2>/dev/null || true
+        fi
+        log_success "nftables 防火墙已配置，端口 ${PORT} 已开放，SSH 端口已保留"
+        handled=true
+    fi
+
+    if [[ "$handled" != "true" ]] && command -v iptables &> /dev/null; then
         ensure_ssh_iptables_rules
         iptables -C INPUT -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || \
             iptables -I INPUT -p tcp --dport "${PORT}" -j ACCEPT
-        
-        # 保存规则 (CentOS 7)
+
         if command -v iptables-save &> /dev/null; then
             iptables-save > /etc/sysconfig/iptables 2>/dev/null || true
         fi
-        
-        # 使用 iptables-services (如果安装)
+
         if systemctl is-active --quiet iptables 2>/dev/null; then
             service iptables save 2>/dev/null || true
         fi
-        
+
         log_success "iptables 防火墙已配置，端口 ${PORT} 已开放"
-    else
+        handled=true
+    fi
+
+    if [[ "$handled" != "true" ]]; then
         log_warn "未检测到活动的防火墙，跳过配置"
         log_info "如需手动开放端口，请运行:"
         echo "  firewall-cmd --permanent --add-port=${PORT}/tcp && firewall-cmd --reload"
@@ -648,35 +609,8 @@ configure_firewall() {
 #-------------------------------------------------------------------------------
 enable_bbr() {
     log_info "启用 BBR 拥塞控制..."
-    
-    KERNEL_VERSION=$(uname -r | cut -d. -f1,2)
-    KERNEL_MAJOR=$(echo "$KERNEL_VERSION" | cut -d. -f1)
-    KERNEL_MINOR=$(echo "$KERNEL_VERSION" | cut -d. -f2)
-    
-    if [[ "$KERNEL_MAJOR" -lt 4 ]] || [[ "$KERNEL_MAJOR" -eq 4 && "$KERNEL_MINOR" -lt 9 ]]; then
-        log_warn "内核版本 ${KERNEL_VERSION} 不支持 BBR (需要 4.9+)"
+    if ! ensure_bbr_enabled; then
         log_info "CentOS 7 用户可考虑升级内核: yum install elrepo-release && yum --enablerepo=elrepo-kernel install kernel-ml"
-        return
-    fi
-    
-    if sysctl net.ipv4.tcp_congestion_control 2>/dev/null | grep -q bbr; then
-        log_success "BBR 已经启用"
-        return
-    fi
-    
-    cat >> /etc/sysctl.conf << EOF
-
-# BBR 拥塞控制
-net.core.default_qdisc=fq
-net.ipv4.tcp_congestion_control=bbr
-EOF
-    
-    sysctl -p > /dev/null 2>&1
-    
-    if sysctl net.ipv4.tcp_congestion_control 2>/dev/null | grep -q bbr; then
-        log_success "BBR 启用成功"
-    else
-        log_warn "BBR 启用可能需要重启系统"
     fi
 }
 
@@ -685,13 +619,14 @@ EOF
 #-------------------------------------------------------------------------------
 setup_health_check() {
     log_info "配置健康检查定时任务..."
-    
+
     if [[ -f "${SCRIPT_DIR}/health-check.sh" ]]; then
         cp "${SCRIPT_DIR}/health-check.sh" /usr/local/bin/xray-health-check.sh
-        chmod +x /usr/local/bin/xray-health-check.sh
-        
-        (crontab -l 2>/dev/null | grep -v "xray-health-check"; echo "0 * * * * /usr/local/bin/xray-health-check.sh >> /var/log/xray/health-check.log 2>&1") | crontab -
-        
+        chmod 755 /usr/local/bin/xray-health-check.sh
+
+        remove_crontab_lines_matching 'xray-health-check'
+        ( crontab -l 2>/dev/null; echo "0 * * * * /usr/local/bin/xray-health-check.sh >> /var/log/xray/health-check.log 2>&1" ) | crontab -
+
         log_success "健康检查定时任务已配置 (每小时执行)"
     else
         log_warn "未找到 health-check.sh，跳过定时任务配置"
@@ -703,16 +638,22 @@ setup_health_check() {
 #-------------------------------------------------------------------------------
 install_scripts() {
     log_info "安装管理脚本..."
-    
+
+    if [[ -d "${SCRIPT_DIR}/lib" ]]; then
+        mkdir -p /usr/local/share/vrs/lib
+        cp "${SCRIPT_DIR}/lib"/*.sh /usr/local/share/vrs/lib/ 2>/dev/null || true
+        chmod 644 /usr/local/share/vrs/lib/*.sh 2>/dev/null || true
+    fi
+
     if [[ -f "${SCRIPT_DIR}/show-config.sh" ]]; then
         cp "${SCRIPT_DIR}/show-config.sh" /usr/local/bin/xray-show-config
-        chmod +x /usr/local/bin/xray-show-config
+        chmod 755 /usr/local/bin/xray-show-config
         log_success "配置查看脚本已安装: xray-show-config"
     fi
-    
+
     if [[ -f "${SCRIPT_DIR}/uninstall-centos.sh" ]]; then
         cp "${SCRIPT_DIR}/uninstall-centos.sh" /usr/local/bin/xray-uninstall.sh
-        chmod +x /usr/local/bin/xray-uninstall.sh
+        chmod 755 /usr/local/bin/xray-uninstall.sh
         log_success "卸载脚本已安装: xray-uninstall.sh"
     fi
 }
@@ -722,13 +663,17 @@ install_scripts() {
 #-------------------------------------------------------------------------------
 generate_client_config() {
     log_info "生成客户端配置..."
-    
+
     if [[ -n "$SERVER_IP_OVERRIDE" ]]; then
+        if ! is_valid_ip "$SERVER_IP_OVERRIDE"; then
+            log_error "--server-ip 必须是合法的 IPv4 / IPv6 地址: $SERVER_IP_OVERRIDE"
+            exit 1
+        fi
         SERVER_IP="$SERVER_IP_OVERRIDE"
     else
-        SERVER_IP=$(curl -s4 ifconfig.me || curl -s4 ip.sb || curl -s4 ipinfo.io/ip)
+        SERVER_IP=$(detect_public_ipv4 || true)
     fi
-    
+
     if [[ -z "$SERVER_IP" ]]; then
         log_warn "无法获取公网 IP，请手动替换配置中的 SERVER_IP"
         SERVER_IP="YOUR_SERVER_IP"
@@ -811,10 +756,6 @@ EOF
 
     chmod 600 "$CLIENT_CONFIG_FILE"
     log_success "完整配置已保存到 ${CLIENT_CONFIG_FILE}"
-}
-
-json_escape() {
-    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
 write_structured_outputs() {
